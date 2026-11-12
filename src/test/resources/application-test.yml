@@ -13,6 +13,9 @@ spring:
     hikari:
       initialization-fail-timeout: -1
   jpa:
+    hibernate:
+      ddl-auto: none
+    # Necessário porque o teste não acessa o banco para descobrir o dialeto (o aviso HHH90000025 é esperado).
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     properties:
       hibernate:
