@@ -1,0 +1,25 @@
+# Perfil dos testes de fumaça: sobe o contexto sem Postgres/Docker/Ollama.
+# Testes de integração com banco real usam Testcontainers (F03).
+spring:
+  docker:
+    compose:
+      enabled: false
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:postgresql://localhost:5432/inexistente
+    username: teste
+    password: teste
+    hikari:
+      initialization-fail-timeout: -1
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        boot:
+          allow_jdbc_metadata_access: false
+
+management:
+  health:
+    db:
+      enabled: false

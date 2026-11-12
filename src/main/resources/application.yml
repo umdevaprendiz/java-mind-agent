@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: java-mind-agent
+  profiles:
+    default: dev
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+    fail-on-missing-locations: false
+  ai:
+    ollama:
+      # Ollama roda no host (decisão D2); sobrescreva com OLLAMA_BASE_URL se necessário.
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    vectorstore:
+      pgvector:
+        # O schema (inclusive a tabela de embeddings) é criado pelo Flyway (F03), não pelo Spring AI.
+        initialize-schema: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  cors:
+    # Origens autorizadas a chamar /api/** (front React em desenvolvimento).
+    allowed-origins:
+      - http://localhost:5173
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+management:
+  endpoint:
+    health:
+      show-details: always
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
