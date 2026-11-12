@@ -1,13 +1,33 @@
+# Infra local do Java Mind Agent.
+# O Ollama NÃO fica aqui: roda no host (decisão D2) para reaproveitar os modelos já baixados.
+# Credenciais vêm do arquivo .env (copie de .env.example). Suba com: docker compose up -d --wait
+name: java-mind-agent
+
 services:
-  ollama:
-    image: 'ollama/ollama:latest'
-    ports:
-      - '11434'
   postgres:
-    image: 'postgres:latest'
+    image: pgvector/pgvector:0.8.7-pg17
+    restart: unless-stopped
+    labels:
+      # O Spring Boot só reconhece a imagem "postgres"; este label faz a imagem pgvector
+      # ser tratada como Postgres e o DataSource ser configurado automaticamente em dev.
+      org.springframework.boot.service-connection: postgres
     environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      POSTGRES_DB: ${POSTGRES_DB:-javamind}
+      POSTGRES_USER: ${POSTGRES_USER:-javamind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env (copie de .env.example)}
     ports:
-      - '5432'
+      # Só em loopback. 5433 no host porque a 5432 já é usada por um Postgres local da máquina.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Roda apenas na primeira inicialização do volume (cria a extensão vector).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:
