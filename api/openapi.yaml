@@ -1,0 +1,1904 @@
+openapi: 3.1.0
+
+info:
+  title: Java Mind Agent API
+  version: 0.1.0
+  summary: Contrato HTTP entre o front React e o backend Spring Boot do Java Mind Agent.
+  description: |
+    Este arquivo é a **fonte da verdade** do contrato (F04). Backend e front implementam a partir dele:
+    o front gera os tipos TypeScript e os mocks (MSW) daqui; o backend implementa os controllers e os testes
+    de contrato conferem que nada se afasta dele.
+
+    ## Convenções
+
+    - Base `/api`, JSON em UTF-8, campos em `camelCase`, datas em ISO-8601 UTC (`date-time`).
+    - **Ids**: UUID para conversa, anexo, PDF, questão, resposta, lote e fonte; `int64` para mensagem (ordem de gravação).
+    - **Versão do Java**: inteiro *major* (`8`, `17`, `21`...). `1.x` vale `x` (Java 1.4 = `4`). `null` significa **automático**.
+    - **Tier de modelo**: `low`, `medium`, `strong`, `extra` (baixo, médio, forte, extra). Valores de enums de estado
+      espelham o banco (`PENDING`, `RUNNING`...).
+    - **Sem autenticação**: aplicação local de um único usuário. CORS liberado só para as origens configuradas.
+    - **Campos desconhecidos**: clientes devem ignorar campos e tipos de evento que não conhecem (evolução compatível).
+
+    ## Erros
+
+    Toda resposta de erro é `application/problem+json` (RFC 9457) com um `code` estável (`ErrorCode`) para o front
+    decidir o que mostrar. Erros que acontecem **depois** que um stream começou chegam como evento `error`.
+
+    ## Paginação
+
+    Listas paginadas usam `page` (base 0) e `size` (padrão 20, máximo 100) e devolvem `items`, `page`, `size`,
+    `totalItems` e `totalPages`.
+
+    ## Streaming (SSE)
+
+    Endpoints que respondem `text/event-stream` enviam mensagens no formato padrão:
+
+    ```
+    event: token
+    data: {"type":"token","text":"Um record"}
+
+    ```
+
+    - O nome em `event:` é igual ao campo `type` do JSON em `data:` (facilita *discriminated unions* no TypeScript).
+    - `EventSource` do navegador só faz GET; como o chat usa POST, o front deve usar `fetch` com leitura do
+      corpo em *stream* (ex.: `@microsoft/fetch-event-source`).
+    - Linhas de comentário (`: keep-alive`) são enviadas a cada ~15 s, pois carregar um modelo em CPU pode levar
+      dezenas de segundos. Clientes as ignoram.
+    - **Cancelar** = o cliente encerra a conexão (`AbortController`); o servidor interrompe a geração.
+    - Ordem típica no chat: `start` → `status`* → (`thinking` | `token` | `tool_call` | `tool_result` | `source`)* →
+      `usage` → `done`. Um `error` encerra o stream.
+
+servers:
+  - url: http://localhost:8080
+    description: Desenvolvimento local
+
+tags:
+  - name: Chat
+    description: Conversa com o agente, com resposta em streaming.
+  - name: Conversations
+    description: Histórico de conversas, mensagens e anexos.
+  - name: Models
+    description: Catálogo de modelos locais por nível de custo (tiers) e gerenciamento de download.
+  - name: Settings
+    description: Preferências persistidas.
+  - name: PDF
+    description: PDFs de questões, revisão das questões e exportação.
+  - name: Jobs
+    description: Resolução em lote das questões de um PDF.
+  - name: Knowledge
+    description: Documentação oficial do Java indexada (RAG) e registro de versões.
+  - name: Sandbox
+    description: Execução isolada de código Java.
+  - name: System
+    description: Saúde do ambiente.
+
+security: []
+
+paths:
+  # ------------------------------------------------------------------ Chat
+  /api/chat:
+    post:
+      tags: [Chat]
+      operationId: sendChatMessage
+      summary: Envia uma mensagem e recebe a resposta em streaming
+      description: |
+        Sem `conversationId`, cria uma conversa nova (o id vem no evento `start`). `questionId` ancora a pergunta em
+        uma questão de PDF já resolvida (acompanhamento, F31). Para **editar** ou **regenerar**, apague as mensagens
+        a partir da escolhida (`DELETE /api/conversations/{id}/messages`) e envie de novo.
+
+        Falhas antes do início do stream (conversa inexistente, Ollama fora do ar, modelo não instalado) voltam como
+        `problem+json`; depois do início, como evento `error`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatRequest'}
+      responses:
+        '200':
+          description: Stream de eventos de chat.
+          headers:
+            Cache-Control: {schema: {type: string, const: no-cache}}
+          content:
+            text/event-stream:
+              schema: {$ref: '#/components/schemas/ChatStreamEvent'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  # ------------------------------------------------------------ Conversations
+  /api/conversations:
+    get:
+      tags: [Conversations]
+      operationId: listConversations
+      summary: Lista conversas, da mais recente para a mais antiga
+      parameters:
+        - {$ref: '#/components/parameters/PageParam'}
+        - {$ref: '#/components/parameters/SizeParam'}
+        - name: q
+          in: query
+          description: Busca por texto no título e nas mensagens.
+          schema: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Página de conversas.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConversationPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Cria uma conversa vazia
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateConversationRequest'}
+      responses:
+        '201':
+          description: Conversa criada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+
+  /api/conversations/{conversationId}:
+    parameters:
+      - {$ref: '#/components/parameters/ConversationId'}
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      summary: Detalha uma conversa
+      responses:
+        '200':
+          description: Conversa.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Conversations]
+      operationId: updateConversation
+      summary: Atualiza título e preferências da conversa
+      description: Semântica de *merge patch*. Campo ausente = não muda; `null` explícito em `tier`, `javaVersion` volta ao padrão.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateConversationRequest'}
+      responses:
+        '200':
+          description: Conversa atualizada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      summary: Apaga a conversa, as mensagens e os anexos
+      responses:
+        '204': {description: Apagada.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/conversations/{conversationId}/messages:
+    parameters:
+      - {$ref: '#/components/parameters/ConversationId'}
+    get:
+      tags: [Conversations]
+      operationId: listMessages
+      summary: Lista as mensagens da conversa em ordem de gravação
+      responses:
+        '200':
+          description: Mensagens.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Message'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Conversations]
+      operationId: truncateMessages
+      summary: Apaga a mensagem indicada e todas as posteriores
+      description: Base para **editar** (apague a partir da mensagem do usuário e reenvie) e **regenerar** a resposta.
+      parameters:
+        - name: fromMessageId
+          in: query
+          required: true
+          description: Primeira mensagem a apagar (inclusive).
+          schema: {type: integer, format: int64}
+      responses:
+        '204': {description: Mensagens apagadas.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/conversations/{conversationId}/attachments:
+    parameters:
+      - {$ref: '#/components/parameters/ConversationId'}
+    post:
+      tags: [Conversations]
+      operationId: uploadAttachment
+      summary: Anexa um arquivo de código ou stack trace à conversa
+      description: Aceita `.java`, `.zip`, `.txt` e `.log`. O anexo fica pendente até ser referenciado em `attachmentIds` do chat.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: Anexo criado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Attachment'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+
+  /api/conversations/{conversationId}/attachments/{attachmentId}:
+    parameters:
+      - {$ref: '#/components/parameters/ConversationId'}
+      - name: attachmentId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      tags: [Conversations]
+      operationId: deleteAttachment
+      summary: Remove um anexo
+      responses:
+        '204': {description: Removido.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  # ------------------------------------------------------------------ Models
+  /api/models:
+    get:
+      tags: [Models]
+      operationId: getModelCatalog
+      summary: Catálogo de tiers, estado de instalação e hardware
+      description: Alimenta o seletor Baixo / Médio / Forte / Extra. Tier que não cabe na máquina vem com `available=false`.
+      responses:
+        '200':
+          description: Catálogo.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelCatalog'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /api/models/{modelId}/pull:
+    parameters:
+      - {$ref: '#/components/parameters/ModelId'}
+    post:
+      tags: [Models]
+      operationId: pullModel
+      summary: Baixa o modelo do tier, com progresso em streaming
+      description: Encerrar a conexão cancela o download. Dois downloads do mesmo modelo ao mesmo tempo retornam 409.
+      responses:
+        '200':
+          description: Stream de progresso do download.
+          content:
+            text/event-stream:
+              schema: {$ref: '#/components/schemas/ModelPullStreamEvent'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /api/models/{modelId}:
+    parameters:
+      - {$ref: '#/components/parameters/ModelId'}
+    delete:
+      tags: [Models]
+      operationId: deleteModel
+      summary: Remove o modelo do disco
+      responses:
+        '204': {description: Removido.}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /api/models/{modelId}/warmup:
+    parameters:
+      - {$ref: '#/components/parameters/ModelId'}
+    post:
+      tags: [Models]
+      operationId: warmUpModel
+      summary: Carrega o modelo na memória
+      description: Responde logo; acompanhe `loaded` em `GET /api/models`.
+      responses:
+        '202': {description: Carregamento iniciado.}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: O modelo não cabe na memória disponível (`MODEL_DOES_NOT_FIT`) ou não está instalado (`MODEL_NOT_INSTALLED`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /api/models/{modelId}/unload:
+    parameters:
+      - {$ref: '#/components/parameters/ModelId'}
+    post:
+      tags: [Models]
+      operationId: unloadModel
+      summary: Descarrega o modelo da memória
+      responses:
+        '204': {description: Descarregado.}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  # ---------------------------------------------------------------- Settings
+  /api/settings:
+    get:
+      tags: [Settings]
+      operationId: getSettings
+      summary: Preferências atuais
+      responses:
+        '200':
+          description: Preferências.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Settings'}
+    put:
+      tags: [Settings]
+      operationId: updateSettings
+      summary: Substitui as preferências
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Settings'}
+      responses:
+        '200':
+          description: Preferências salvas.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Settings'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+
+  # --------------------------------------------------------------------- PDF
+  /api/pdfs:
+    get:
+      tags: [PDF]
+      operationId: listPdfs
+      summary: Lista os PDFs enviados
+      parameters:
+        - {$ref: '#/components/parameters/PageParam'}
+        - {$ref: '#/components/parameters/SizeParam'}
+      responses:
+        '200':
+          description: Página de PDFs.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PdfDocumentPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+    post:
+      tags: [PDF]
+      operationId: uploadPdf
+      summary: Envia um PDF de questões
+      description: |
+        A extração de texto/OCR e a segmentação em questões começam sozinhas; acompanhe por
+        `GET /api/pdfs/{pdfId}/events`. O mesmo conteúdo enviado duas vezes (mesmo hash) devolve o PDF existente
+        com status 200.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: PDF novo, processamento iniciado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PdfDocument'}
+        '200':
+          description: PDF já existente (mesmo conteúdo).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PdfDocument'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+
+  /api/pdfs/{pdfId}:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [PDF]
+      operationId: getPdf
+      summary: Detalha um PDF
+      responses:
+        '200':
+          description: PDF.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PdfDocument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [PDF]
+      operationId: deletePdf
+      summary: Apaga o PDF, as questões, respostas e lotes
+      responses:
+        '204': {description: Apagado.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/pdfs/{pdfId}/events:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [PDF]
+      operationId: streamPdfEvents
+      summary: Progresso da extração e da segmentação, em streaming
+      description: Termina com `done` ou `error`. Se o PDF já terminou de processar, envia o estado atual e `done`.
+      responses:
+        '200':
+          description: Stream de progresso.
+          content:
+            text/event-stream:
+              schema: {$ref: '#/components/schemas/PdfStreamEvent'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/pdfs/{pdfId}/questions:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [PDF]
+      operationId: listQuestions
+      summary: Questões do PDF em ordem de leitura, com a última resposta de cada uma
+      responses:
+        '200':
+          description: Questões.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Question'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      tags: [PDF]
+      operationId: createQuestion
+      summary: Adiciona uma questão manualmente (também serve para dividir uma questão)
+      description: Sem `afterQuestionId`, entra no fim. A numeração (`ordinal`) das seguintes é reajustada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateQuestionRequest'}
+      responses:
+        '201':
+          description: Questão criada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Question'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/pdfs/{pdfId}/questions/{questionId}:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+      - {$ref: '#/components/parameters/QuestionId'}
+    patch:
+      tags: [PDF]
+      operationId: updateQuestion
+      summary: Corrige o texto, as alternativas ou a versão de uma questão
+      description: Semântica de *merge patch*. Editar uma questão limpa `needsReview`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateQuestionRequest'}
+      responses:
+        '200':
+          description: Questão atualizada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Question'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [PDF]
+      operationId: deleteQuestion
+      summary: Remove uma questão (também serve para mesclar duas)
+      responses:
+        '204': {description: Removida.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/pdfs/{pdfId}/estimate:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [PDF]
+      operationId: estimateJob
+      summary: Estima o tempo para resolver o PDF em um tier
+      parameters:
+        - name: tier
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/Tier'}
+      responses:
+        '200':
+          description: Estimativa.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/JobEstimate'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /api/pdfs/{pdfId}/jobs:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [Jobs]
+      operationId: listJobs
+      summary: Lotes de resolução do PDF, do mais recente para o mais antigo
+      responses:
+        '200':
+          description: Lotes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      tags: [Jobs]
+      operationId: createJob
+      summary: Inicia a resolução das questões (todas, ou só as indicadas)
+      description: |
+        Processa uma questão por vez. Para **repetir uma questão**, envie só o id dela em `questionIds`.
+        Acompanhe por `GET /api/jobs/{jobId}/events`. Falha com 409 se o PDF ainda não foi segmentado
+        (`PDF_NOT_READY`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateJobRequest'}
+      responses:
+        '202':
+          description: Lote criado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: O tier escolhido não está disponível (`MODEL_NOT_INSTALLED` ou `MODEL_DOES_NOT_FIT`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
+
+  /api/pdfs/{pdfId}/export:
+    parameters:
+      - {$ref: '#/components/parameters/PdfId'}
+    get:
+      tags: [PDF]
+      operationId: exportPdfResults
+      summary: Baixa o gabarito comentado
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema: {type: string, enum: [md, pdf, docx]}
+        - name: jobId
+          in: query
+          description: Lote de onde vêm as respostas. Padrão, a resposta mais recente de cada questão.
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Arquivo gerado.
+          content:
+            text/markdown:
+              schema: {type: string}
+            application/pdf:
+              schema: {type: string, format: binary}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: {type: string, format: binary}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  # -------------------------------------------------------------------- Jobs
+  /api/jobs/{jobId}:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: Estado de um lote
+      responses:
+        '200':
+          description: Lote.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/jobs/{jobId}/events:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    get:
+      tags: [Jobs]
+      operationId: streamJobEvents
+      summary: Progresso do lote questão a questão, em streaming
+      description: Ao conectar, envia `job_status` com o estado atual. Fechar a conexão **não** cancela o lote (use `cancel`).
+      responses:
+        '200':
+          description: Stream de progresso.
+          content:
+            text/event-stream:
+              schema: {$ref: '#/components/schemas/JobStreamEvent'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/jobs/{jobId}/pause:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      tags: [Jobs]
+      operationId: pauseJob
+      summary: Pausa o lote depois da questão em andamento
+      responses:
+        '200':
+          description: Lote pausado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /api/jobs/{jobId}/resume:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      tags: [Jobs]
+      operationId: resumeJob
+      summary: Retoma um lote pausado ou interrompido por reinício
+      responses:
+        '200':
+          description: Lote retomado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /api/jobs/{jobId}/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/JobId'}
+    post:
+      tags: [Jobs]
+      operationId: cancelJob
+      summary: Cancela o lote
+      responses:
+        '200':
+          description: Lote cancelado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  # --------------------------------------------------------------- Knowledge
+  /api/knowledge/versions:
+    get:
+      tags: [Knowledge]
+      operationId: listJavaVersions
+      summary: Versões do Java conhecidas, para o seletor de versão
+      responses:
+        '200':
+          description: Versões, da mais antiga para a mais nova.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/JavaVersionInfo'}
+
+  /api/knowledge/sources:
+    get:
+      tags: [Knowledge]
+      operationId: listCorpusSources
+      summary: Fontes oficiais de documentação e o estado da indexação
+      responses:
+        '200':
+          description: Fontes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/CorpusSource'}
+
+  /api/knowledge/sources/{sourceId}:
+    parameters:
+      - {$ref: '#/components/parameters/SourceId'}
+    get:
+      tags: [Knowledge]
+      operationId: getCorpusSource
+      summary: Detalha uma fonte
+      responses:
+        '200':
+          description: Fonte.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CorpusSource'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/knowledge/sources/{sourceId}/ingest:
+    parameters:
+      - {$ref: '#/components/parameters/SourceId'}
+    post:
+      tags: [Knowledge]
+      operationId: ingestCorpusSource
+      summary: Baixa e indexa a fonte (ou atualiza, se já indexada)
+      description: Responde logo com a fonte em `INGESTING`; acompanhe `status` e `chunkCount` por `GET`.
+      responses:
+        '202':
+          description: Ingestão iniciada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CorpusSource'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /api/knowledge/search:
+    get:
+      tags: [Knowledge]
+      operationId: searchKnowledge
+      summary: Busca na documentação indexada (a mesma recuperação que o agente usa)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 500}
+        - name: javaVersion
+          in: query
+          description: Só trechos válidos para esta versão. Sem o parâmetro, busca em todas.
+          schema: {$ref: '#/components/schemas/JavaVersion'}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 20, default: 5}
+      responses:
+        '200':
+          description: Trechos mais relevantes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/KnowledgeHit'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  # ----------------------------------------------------------------- Sandbox
+  /api/sandbox/run:
+    post:
+      tags: [Sandbox]
+      operationId: runJavaCode
+      summary: Compila e executa um trecho de código na versão pedida
+      description: |
+        Roda em container Docker isolado (sem rede, limites de CPU, memória e tempo). Aceita uma classe completa ou
+        um trecho solto, que é embrulhado automaticamente. Erro de compilação **não** é erro HTTP: vem em
+        `status=COMPILE_ERROR`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RunCodeRequest'}
+      responses:
+        '200':
+          description: Resultado da execução.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunCodeResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  # ------------------------------------------------------------------ System
+  /api/system/status:
+    get:
+      tags: [System]
+      operationId: getSystemStatus
+      summary: Estado do Ollama, do banco e do sandbox
+      description: Para o front mostrar avisos como "Ollama desligado" antes de o usuário tentar conversar.
+      responses:
+        '200':
+          description: Estado do ambiente.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SystemStatus'}
+
+components:
+  # ================================================================ Parameters
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Página, começando em 0.
+      schema: {type: integer, minimum: 0, default: 0}
+    SizeParam:
+      name: size
+      in: query
+      description: Itens por página.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    PdfId:
+      name: pdfId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    QuestionId:
+      name: questionId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ModelId:
+      name: modelId
+      in: path
+      required: true
+      description: Tier de chat ou o modelo de embedding.
+      schema: {$ref: '#/components/schemas/ModelId'}
+
+  # ================================================================= Responses
+  responses:
+    BadRequest:
+      description: Requisição inválida (`VALIDATION_FAILED`). `errors` lista os campos.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    NotFound:
+      description: Recurso inexistente (`NOT_FOUND`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    Conflict:
+      description: O estado atual não permite a operação (`CONFLICT`, `PDF_NOT_READY` ou `JOB_NOT_ACTIVE`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    PayloadTooLarge:
+      description: Arquivo acima do limite (`PAYLOAD_TOO_LARGE`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    UnsupportedMediaType:
+      description: Tipo de arquivo não aceito (`UNSUPPORTED_MEDIA_TYPE`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    ServiceUnavailable:
+      description: Dependência indisponível (`OLLAMA_UNAVAILABLE`, `MODEL_NOT_INSTALLED` ou `SANDBOX_UNAVAILABLE`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+    InternalError:
+      description: Erro inesperado (`INTERNAL_ERROR`).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+
+  # =================================================================== Schemas
+  schemas:
+    # ---------------------------------------------------------------- Básicos
+    Tier:
+      type: string
+      enum: [low, medium, strong, extra]
+      description: Nível de custo do modelo. Em ordem crescente de capacidade e de consumo.
+      examples: [medium]
+    NullableTier:
+      type: [string, 'null']
+      enum: [low, medium, strong, extra, null]
+      description: Igual a `Tier`; `null` = usar o padrão.
+      examples: [null]
+    ModelId:
+      type: string
+      enum: [low, medium, strong, extra, embedding]
+      description: Os quatro tiers de chat mais o modelo de embedding usado no RAG.
+      examples: [strong]
+    JavaVersion:
+      type: integer
+      minimum: 1
+      maximum: 99
+      description: Versão major do Java; `1.x` vale `x`.
+      examples: [21]
+    NullableJavaVersion:
+      type: [integer, 'null']
+      minimum: 1
+      maximum: 99
+      description: Igual a `JavaVersion`; `null` = automático.
+      examples: [null]
+    Language:
+      type: string
+      enum: [pt-BR, en]
+      examples: [pt-BR]
+    NullableLanguage:
+      type: [string, 'null']
+      enum: [pt-BR, en, null]
+      examples: [null]
+    TeachingLevel:
+      type: string
+      enum: [beginner, intermediate, advanced]
+    TeachingStyle:
+      type: string
+      enum: [default, professor, exam, eli5]
+      description: "`professor` explica passo a passo, `exam` responde curto com justificativa, `eli5` simplifica."
+    TeachingOptions:
+      type: object
+      properties:
+        level: {oneOf: [{$ref: '#/components/schemas/TeachingLevel'}, {type: 'null'}]}
+        style: {oneOf: [{$ref: '#/components/schemas/TeachingStyle'}, {type: 'null'}]}
+      examples:
+        - {level: beginner, style: professor}
+    MessageRole:
+      type: string
+      enum: [USER, ASSISTANT, SYSTEM, TOOL]
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_FAILED
+        - NOT_FOUND
+        - CONFLICT
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - MODEL_NOT_INSTALLED
+        - MODEL_DOES_NOT_FIT
+        - OLLAMA_UNAVAILABLE
+        - SANDBOX_UNAVAILABLE
+        - PDF_NOT_READY
+        - JOB_NOT_ACTIVE
+        - CANCELLED
+        - INTERNAL_ERROR
+      description: "Código estável para o front decidir a mensagem e a ação (ex.: oferecer baixar o modelo)."
+    ProblemDetail:
+      type: object
+      description: RFC 9457 com `code` e `errors` adicionais.
+      required: [title, status, code]
+      properties:
+        type: {type: string, format: uri-reference, default: 'about:blank'}
+        title: {type: string}
+        status: {type: integer, minimum: 100, maximum: 599}
+        detail: {type: string}
+        instance: {type: string}
+        code: {$ref: '#/components/schemas/ErrorCode'}
+        errors:
+          type: array
+          description: Preenchido em `VALIDATION_FAILED`.
+          items: {$ref: '#/components/schemas/FieldError'}
+      examples:
+        - {type: 'about:blank', title: Not Found, status: 404, detail: Conversa não encontrada, code: NOT_FOUND}
+        - title: Bad Request
+          status: 400
+          detail: Requisição inválida
+          code: VALIDATION_FAILED
+          errors:
+            - {field: message, message: não pode estar vazio}
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: {type: string}
+        message: {type: string}
+    PageInfo:
+      type: object
+      required: [page, size, totalItems, totalPages]
+      properties:
+        page: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 1}
+        totalItems: {type: integer, format: int64, minimum: 0}
+        totalPages: {type: integer, minimum: 0}
+    SourceRef:
+      type: object
+      description: Trecho de documentação citado em uma resposta.
+      required: [title]
+      properties:
+        title: {type: string}
+        url: {type: [string, 'null'], format: uri}
+        snippet: {type: [string, 'null']}
+        kind: {oneOf: [{$ref: '#/components/schemas/CorpusSourceKind'}, {type: 'null'}]}
+        javaVersionMin: {$ref: '#/components/schemas/NullableJavaVersion'}
+        javaVersionMax: {$ref: '#/components/schemas/NullableJavaVersion'}
+      examples:
+        - title: "JEP 395: Records"
+          url: https://openjdk.org/jeps/395
+          snippet: Records são classes que atuam como portadoras transparentes de dados imutáveis.
+          kind: JEP
+          javaVersionMin: 16
+          javaVersionMax: null
+
+    # ------------------------------------------------------------------- Chat
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        conversationId:
+          type: [string, 'null']
+          format: uuid
+          description: "`null` cria uma conversa nova."
+        message: {type: string, minLength: 1, maxLength: 20000}
+        tier:
+          $ref: '#/components/schemas/NullableTier'
+        javaVersion:
+          $ref: '#/components/schemas/NullableJavaVersion'
+        language:
+          $ref: '#/components/schemas/NullableLanguage'
+        teaching:
+          oneOf: [{$ref: '#/components/schemas/TeachingOptions'}, {type: 'null'}]
+        attachmentIds:
+          type: array
+          items: {type: string, format: uuid}
+          description: Anexos enviados antes por `uploadAttachment`.
+        questionId:
+          type: [string, 'null']
+          format: uuid
+          description: Âncora em uma questão de PDF (a pergunta passa a falar sobre ela e sua resposta).
+      examples:
+        - conversationId: null
+          message: Qual a diferença entre record e classe comum?
+          tier: medium
+          javaVersion: null
+          language: pt-BR
+          attachmentIds: []
+    ChatStreamEvent:
+      description: Evento do stream de `POST /api/chat`. Discriminado pelo campo `type`.
+      oneOf:
+        - {$ref: '#/components/schemas/StartEvent'}
+        - {$ref: '#/components/schemas/StatusEvent'}
+        - {$ref: '#/components/schemas/ThinkingEvent'}
+        - {$ref: '#/components/schemas/TokenEvent'}
+        - {$ref: '#/components/schemas/ToolCallEvent'}
+        - {$ref: '#/components/schemas/ToolResultEvent'}
+        - {$ref: '#/components/schemas/SourceEvent'}
+        - {$ref: '#/components/schemas/UsageEvent'}
+        - {$ref: '#/components/schemas/DoneEvent'}
+        - {$ref: '#/components/schemas/ErrorEvent'}
+      discriminator:
+        propertyName: type
+        mapping:
+          start: '#/components/schemas/StartEvent'
+          status: '#/components/schemas/StatusEvent'
+          thinking: '#/components/schemas/ThinkingEvent'
+          token: '#/components/schemas/TokenEvent'
+          tool_call: '#/components/schemas/ToolCallEvent'
+          tool_result: '#/components/schemas/ToolResultEvent'
+          source: '#/components/schemas/SourceEvent'
+          usage: '#/components/schemas/UsageEvent'
+          done: '#/components/schemas/DoneEvent'
+          error: '#/components/schemas/ErrorEvent'
+    StartEvent:
+      type: object
+      description: Primeiro evento. Informa a conversa, a mensagem do usuário já gravada e o modelo que vai responder.
+      required: [type, conversationId, userMessageId, tier, model]
+      properties:
+        type: {type: string, const: start}
+        conversationId: {type: string, format: uuid}
+        newConversation: {type: boolean, default: false}
+        userMessageId: {type: integer, format: int64}
+        tier: {$ref: '#/components/schemas/Tier'}
+        model: {type: string, description: Nome do modelo no Ollama.}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+      examples:
+        - type: start
+          conversationId: 3f2b8c1e-5d0a-4f6e-9a47-1c2d3e4f5a6b
+          newConversation: true
+          userMessageId: 41
+          tier: medium
+          model: qwen2.5:7b
+          javaVersion: null
+    StatusEvent:
+      type: object
+      description: Fase atual do agente, para a UI mostrar o que está acontecendo (e animar o 3D).
+      required: [type, phase]
+      properties:
+        type: {type: string, const: status}
+        phase:
+          type: string
+          enum: [loading_model, retrieving, executing_code, verifying, generating]
+        message: {type: string}
+      examples:
+        - {type: status, phase: loading_model, message: Carregando o modelo na memória}
+    ThinkingEvent:
+      type: object
+      description: Trecho do raciocínio do modelo (quando o tier/modelo expõe). Não faz parte da resposta final.
+      required: [type, text]
+      properties:
+        type: {type: string, const: thinking}
+        text: {type: string}
+      examples:
+        - {type: thinking, text: "O usuário pergunta sobre records..."}
+    TokenEvent:
+      type: object
+      description: Pedaço da resposta final, a ser concatenado.
+      required: [type, text]
+      properties:
+        type: {type: string, const: token}
+        text: {type: string}
+      examples:
+        - {type: token, text: "Um record "}
+    ToolCallEvent:
+      type: object
+      description: O agente decidiu usar uma ferramenta.
+      required: [type, callId, tool, arguments]
+      properties:
+        type: {type: string, const: tool_call}
+        callId: {type: string}
+        tool:
+          type: string
+          description: "Nome da ferramenta, ex.: `search_docs`, `run_java`, `compare_versions`."
+        arguments: {type: object, additionalProperties: true}
+      examples:
+        - type: tool_call
+          callId: call_1
+          tool: search_docs
+          arguments: {query: records, javaVersion: 21}
+    ToolResultEvent:
+      type: object
+      description: Resultado de uma ferramenta chamada antes.
+      required: [type, callId, tool, ok, summary]
+      properties:
+        type: {type: string, const: tool_result}
+        callId: {type: string}
+        tool: {type: string}
+        ok: {type: boolean}
+        summary: {type: string, description: Resumo curto para a linha do tempo da UI.}
+        output: {type: [string, 'null'], description: "Saída completa, possivelmente truncada."}
+        durationMs: {type: integer, minimum: 0}
+      examples:
+        - {type: tool_result, callId: call_1, tool: search_docs, ok: true, summary: "3 trechos encontrados", output: null, durationMs: 85}
+    SourceEvent:
+      type: object
+      description: Fonte consultada, exibida como citação.
+      required: [type, source]
+      properties:
+        type: {type: string, const: source}
+        source: {$ref: '#/components/schemas/SourceRef'}
+      examples:
+        - type: source
+          source: {title: "JEP 395: Records", url: "https://openjdk.org/jeps/395", kind: JEP, javaVersionMin: 16}
+    UsageEvent:
+      type: object
+      description: Métricas da geração (mostradas ao lado da resposta).
+      required: [type, promptTokens, completionTokens]
+      properties:
+        type: {type: string, const: usage}
+        promptTokens: {type: integer, minimum: 0}
+        completionTokens: {type: integer, minimum: 0}
+        tokensPerSecond: {type: [number, 'null'], minimum: 0}
+        timeToFirstTokenMs: {type: [integer, 'null'], minimum: 0}
+        totalDurationMs: {type: [integer, 'null'], minimum: 0}
+      examples:
+        - {type: usage, promptTokens: 312, completionTokens: 148, tokensPerSecond: 6.4, timeToFirstTokenMs: 2300, totalDurationMs: 25400}
+    DoneEvent:
+      type: object
+      description: Fim normal do stream. A resposta já está gravada em `assistantMessageId`.
+      required: [type, assistantMessageId, finishReason]
+      properties:
+        type: {type: string, const: done}
+        assistantMessageId: {type: integer, format: int64}
+        finishReason: {type: string, enum: [stop, length, cancelled]}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+      examples:
+        - {type: done, assistantMessageId: 42, finishReason: stop, javaVersion: 21}
+    ErrorEvent:
+      type: object
+      description: Falha depois de o stream começar. Encerra o stream.
+      required: [type, code, message]
+      properties:
+        type: {type: string, const: error}
+        code: {$ref: '#/components/schemas/ErrorCode'}
+        message: {type: string}
+        retryable: {type: boolean, default: false}
+      examples:
+        - {type: error, code: MODEL_NOT_INSTALLED, message: "O modelo do tier Forte não está instalado.", retryable: false}
+    SimpleDoneEvent:
+      type: object
+      description: Fim normal de streams sem payload final (download de modelo, PDF, lote).
+      required: [type]
+      properties:
+        type: {type: string, const: done}
+      examples:
+        - {type: done}
+    ToolCall:
+      type: object
+      description: Chamada de ferramenta registrada em uma mensagem.
+      required: [callId, tool]
+      properties:
+        callId: {type: string}
+        tool: {type: string}
+        arguments: {type: object, additionalProperties: true}
+        ok: {type: [boolean, 'null']}
+        summary: {type: [string, 'null']}
+        durationMs: {type: [integer, 'null']}
+      examples:
+        - {callId: call_1, tool: search_docs, arguments: {query: records}, ok: true, summary: "3 trechos encontrados", durationMs: 85}
+
+    # ---------------------------------------------------------- Conversations
+    Conversation:
+      type: object
+      required: [id, title, tier, javaVersion, language, preferences, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        language: {$ref: '#/components/schemas/Language'}
+        preferences:
+          type: object
+          additionalProperties: true
+          description: Preferências extras (nível de ensino, estilo).
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+      examples:
+        - id: 3f2b8c1e-5d0a-4f6e-9a47-1c2d3e4f5a6b
+          title: Records no Java 21
+          tier: medium
+          javaVersion: 21
+          language: pt-BR
+          preferences: {teaching: {level: beginner}}
+          createdAt: "2026-11-12T19:00:00Z"
+          updatedAt: "2026-11-12T19:05:00Z"
+    ConversationSummary:
+      type: object
+      required: [id, title, tier, javaVersion, language, messageCount, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        language: {$ref: '#/components/schemas/Language'}
+        messageCount: {type: integer, minimum: 0}
+        lastMessagePreview: {type: [string, 'null'], maxLength: 200}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+      examples:
+        - id: 3f2b8c1e-5d0a-4f6e-9a47-1c2d3e4f5a6b
+          title: Records no Java 21
+          tier: medium
+          javaVersion: 21
+          language: pt-BR
+          messageCount: 4
+          lastMessagePreview: Um record é uma classe de dados imutável.
+          createdAt: "2026-11-12T19:00:00Z"
+          updatedAt: "2026-11-12T19:05:00Z"
+    ConversationPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageInfo'}
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/ConversationSummary'}
+    CreateConversationRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        language: {$ref: '#/components/schemas/NullableLanguage'}
+      examples:
+        - {title: Dúvida sobre generics, tier: low}
+    UpdateConversationRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        language: {$ref: '#/components/schemas/Language'}
+        preferences: {type: object, additionalProperties: true}
+      examples:
+        - {title: Generics e wildcards, javaVersion: 17}
+    Message:
+      type: object
+      required: [id, conversationId, role, content, createdAt]
+      properties:
+        id: {type: integer, format: int64}
+        conversationId: {type: string, format: uuid}
+        role: {$ref: '#/components/schemas/MessageRole'}
+        content: {type: string}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        model: {type: [string, 'null']}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        promptTokens: {type: [integer, 'null']}
+        completionTokens: {type: [integer, 'null']}
+        tokensPerSecond: {type: [number, 'null']}
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/SourceRef'}
+        toolCalls:
+          type: array
+          items: {$ref: '#/components/schemas/ToolCall'}
+        attachments:
+          type: array
+          items: {$ref: '#/components/schemas/Attachment'}
+        createdAt: {type: string, format: date-time}
+      examples:
+        - id: 42
+          conversationId: 3f2b8c1e-5d0a-4f6e-9a47-1c2d3e4f5a6b
+          role: ASSISTANT
+          content: Um record é uma classe de dados imutável, introduzida no Java 16.
+          tier: medium
+          model: qwen2.5:7b
+          javaVersion: 21
+          promptTokens: 312
+          completionTokens: 148
+          tokensPerSecond: 6.4
+          sources:
+            - {title: "JEP 395: Records", url: "https://openjdk.org/jeps/395", kind: JEP}
+          toolCalls: []
+          attachments: []
+          createdAt: "2026-11-12T19:05:00Z"
+    Attachment:
+      type: object
+      required: [id, conversationId, filename, sizeBytes, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        conversationId: {type: string, format: uuid}
+        messageId: {type: [integer, 'null'], format: int64, description: "`null` até o anexo ser enviado em uma mensagem."}
+        filename: {type: string}
+        contentType: {type: [string, 'null']}
+        sizeBytes: {type: integer, format: int64, minimum: 0}
+        createdAt: {type: string, format: date-time}
+      examples:
+        - id: 9d1e7f2a-0b3c-4d5e-8f60-71829a3b4c5d
+          conversationId: 3f2b8c1e-5d0a-4f6e-9a47-1c2d3e4f5a6b
+          messageId: null
+          filename: Erro.java
+          contentType: text/x-java-source
+          sizeBytes: 1280
+          createdAt: "2026-11-12T19:02:00Z"
+
+    # ----------------------------------------------------------------- Models
+    HardwareInfo:
+      type: object
+      required: [totalRamGb, freeRamGb, cpuOnly]
+      properties:
+        totalRamGb: {type: number, minimum: 0}
+        freeRamGb: {type: number, minimum: 0}
+        gpu: {type: [string, 'null']}
+        cpuOnly: {type: boolean, description: "`true` quando não há GPU com aceleração; a inferência roda na CPU."}
+      examples:
+        - {totalRamGb: 15.8, freeRamGb: 7.4, gpu: Intel(R) UHD Graphics, cpuOnly: true}
+    ModelUnavailableReason:
+      type: string
+      enum: [NOT_INSTALLED, DOES_NOT_FIT, HOST_UNREACHABLE]
+      description: Por que o tier não pode ser usado agora.
+    ModelInfo:
+      type: object
+      required: [id, kind, label, ollamaModel, installed, loaded, fits, available, recommended, speed]
+      properties:
+        id: {$ref: '#/components/schemas/ModelId'}
+        kind: {type: string, enum: [chat, embedding]}
+        label: {type: string, description: "Nome para exibir: Baixo, Médio, Forte, Extra."}
+        description: {type: string}
+        ollamaModel: {type: string, description: Nome do modelo no Ollama.}
+        remoteHost: {type: [string, 'null'], description: URL do Ollama dedicado a este tier; `null` = o padrão.}
+        sizeGb: {type: [number, 'null'], description: "Tamanho em disco, conhecido depois de instalado."}
+        minRamGb: {type: number, minimum: 0}
+        installed: {type: boolean}
+        loaded: {type: boolean, description: Está carregado na memória agora.}
+        fits: {type: boolean, description: Cabe na RAM livre desta máquina.}
+        supportsTools: {type: [boolean, 'null'], description: "`null` enquanto não instalado."}
+        available: {type: boolean, description: "`installed` e `fits`, ou host remoto alcançável."}
+        unavailableReason:
+          oneOf: [{$ref: '#/components/schemas/ModelUnavailableReason'}, {type: 'null'}]
+        recommended: {type: boolean}
+        speed: {type: string, enum: [fast, medium, slow, very_slow]}
+        measuredTokensPerSecond: {type: [number, 'null'], minimum: 0}
+        diskUsageGb: {type: [number, 'null'], minimum: 0}
+      examples:
+        - id: medium
+          kind: chat
+          label: Médio
+          description: Uso geral, equilíbrio entre qualidade e velocidade.
+          ollamaModel: qwen2.5:7b
+          remoteHost: null
+          sizeGb: 4.4
+          minRamGb: 6
+          installed: true
+          loaded: false
+          fits: true
+          supportsTools: true
+          available: true
+          unavailableReason: null
+          recommended: true
+          speed: medium
+          measuredTokensPerSecond: 6.4
+          diskUsageGb: 4.4
+    ModelCatalog:
+      type: object
+      required: [hardware, defaultTier, tiers, embedding]
+      properties:
+        hardware: {$ref: '#/components/schemas/HardwareInfo'}
+        defaultTier: {$ref: '#/components/schemas/Tier'}
+        tiers:
+          type: array
+          description: Os quatro tiers, de Baixo a Extra.
+          items: {$ref: '#/components/schemas/ModelInfo'}
+        embedding: {$ref: '#/components/schemas/ModelInfo'}
+    PullProgressEvent:
+      type: object
+      required: [type, status]
+      properties:
+        type: {type: string, const: progress}
+        status: {type: string, description: "Etapa informada pelo Ollama (ex.: `pulling manifest`, `downloading`, `verifying`)."}
+        completedBytes: {type: [integer, 'null'], format: int64, minimum: 0}
+        totalBytes: {type: [integer, 'null'], format: int64, minimum: 0}
+        percent: {type: [number, 'null'], minimum: 0, maximum: 100}
+      examples:
+        - {type: progress, status: downloading, completedBytes: 1073741824, totalBytes: 4683087332, percent: 22.9}
+    ModelPullStreamEvent:
+      description: Evento do stream de `POST /api/models/{modelId}/pull`.
+      oneOf:
+        - {$ref: '#/components/schemas/PullProgressEvent'}
+        - {$ref: '#/components/schemas/SimpleDoneEvent'}
+        - {$ref: '#/components/schemas/ErrorEvent'}
+      discriminator:
+        propertyName: type
+        mapping:
+          progress: '#/components/schemas/PullProgressEvent'
+          done: '#/components/schemas/SimpleDoneEvent'
+          error: '#/components/schemas/ErrorEvent'
+    Settings:
+      type: object
+      required: [defaultTier, defaultJavaVersion, language]
+      properties:
+        defaultTier: {$ref: '#/components/schemas/Tier'}
+        defaultJavaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        language: {$ref: '#/components/schemas/Language'}
+      examples:
+        - {defaultTier: medium, defaultJavaVersion: null, language: pt-BR}
+
+    # -------------------------------------------------------------------- PDF
+    PdfStatus:
+      type: string
+      enum: [UPLOADED, EXTRACTING, EXTRACTED, SEGMENTING, SEGMENTED, FAILED]
+    PdfDocument:
+      type: object
+      required: [id, filename, sizeBytes, status, questionCount, needsReviewCount, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        filename: {type: string}
+        sizeBytes: {type: integer, format: int64, minimum: 0}
+        pageCount: {type: [integer, 'null'], minimum: 1}
+        status: {$ref: '#/components/schemas/PdfStatus'}
+        errorMessage: {type: [string, 'null']}
+        questionCount: {type: integer, minimum: 0}
+        needsReviewCount: {type: integer, minimum: 0, description: Questões marcadas como duvidosas (OCR/segmentação).}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+      examples:
+        - id: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+          filename: simulado-oca.pdf
+          sizeBytes: 482113
+          pageCount: 12
+          status: SEGMENTED
+          errorMessage: null
+          questionCount: 40
+          needsReviewCount: 3
+          createdAt: "2026-11-12T19:10:00Z"
+          updatedAt: "2026-11-12T19:12:30Z"
+    PdfDocumentPage:
+      allOf:
+        - {$ref: '#/components/schemas/PageInfo'}
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/PdfDocument'}
+    PdfStatusEvent:
+      type: object
+      required: [type, status]
+      properties:
+        type: {type: string, const: pdf_status}
+        status: {$ref: '#/components/schemas/PdfStatus'}
+        pagesDone: {type: [integer, 'null'], minimum: 0}
+        pagesTotal: {type: [integer, 'null'], minimum: 0}
+        message: {type: [string, 'null']}
+      examples:
+        - {type: pdf_status, status: EXTRACTING, pagesDone: 4, pagesTotal: 12, message: "OCR na página 5"}
+    PdfStreamEvent:
+      description: Evento do stream de `GET /api/pdfs/{pdfId}/events`.
+      oneOf:
+        - {$ref: '#/components/schemas/PdfStatusEvent'}
+        - {$ref: '#/components/schemas/SimpleDoneEvent'}
+        - {$ref: '#/components/schemas/ErrorEvent'}
+      discriminator:
+        propertyName: type
+        mapping:
+          pdf_status: '#/components/schemas/PdfStatusEvent'
+          done: '#/components/schemas/SimpleDoneEvent'
+          error: '#/components/schemas/ErrorEvent'
+    QuestionType:
+      type: string
+      enum: [MULTIPLE_CHOICE, TRUE_FALSE, ESSAY, CODE_OUTPUT, FILL_IN]
+    Alternative:
+      type: object
+      required: [label, text]
+      properties:
+        label: {type: string, maxLength: 10}
+        text: {type: string}
+      examples:
+        - {label: a, text: "2"}
+    Question:
+      type: object
+      required: [id, pdfDocumentId, ordinal, type, statement, needsReview, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        pdfDocumentId: {type: string, format: uuid}
+        ordinal: {type: integer, minimum: 1, description: Ordem de leitura.}
+        label: {type: [string, 'null'], description: "Numeração como aparece no PDF (ex.: `7`, `7.a`)."}
+        type: {$ref: '#/components/schemas/QuestionType'}
+        statement: {type: string}
+        code: {type: [string, 'null']}
+        alternatives:
+          type: [array, 'null']
+          items: {$ref: '#/components/schemas/Alternative'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        pageNumber: {type: [integer, 'null'], minimum: 1}
+        needsReview: {type: boolean}
+        latestAnswer:
+          oneOf: [{$ref: '#/components/schemas/Answer'}, {type: 'null'}]
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+      examples:
+        - id: c0ffee00-1111-4222-8333-444455556666
+          pdfDocumentId: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+          ordinal: 1
+          label: "1"
+          type: MULTIPLE_CHOICE
+          statement: O que o código imprime?
+          code: "System.out.println(1 + 1);"
+          alternatives:
+            - {label: a, text: "2"}
+            - {label: b, text: "11"}
+          javaVersion: 17
+          pageNumber: 1
+          needsReview: false
+          latestAnswer: null
+          createdAt: "2026-11-12T19:12:00Z"
+          updatedAt: "2026-11-12T19:12:00Z"
+    CreateQuestionRequest:
+      type: object
+      required: [type, statement]
+      properties:
+        afterQuestionId: {type: [string, 'null'], format: uuid}
+        label: {type: [string, 'null']}
+        type: {$ref: '#/components/schemas/QuestionType'}
+        statement: {type: string, minLength: 1}
+        code: {type: [string, 'null']}
+        alternatives:
+          type: [array, 'null']
+          items: {$ref: '#/components/schemas/Alternative'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+      examples:
+        - {afterQuestionId: null, type: ESSAY, statement: Explique o que é o garbage collector.}
+    UpdateQuestionRequest:
+      type: object
+      properties:
+        label: {type: [string, 'null']}
+        type: {$ref: '#/components/schemas/QuestionType'}
+        statement: {type: string, minLength: 1}
+        code: {type: [string, 'null']}
+        alternatives:
+          type: [array, 'null']
+          items: {$ref: '#/components/schemas/Alternative'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+      examples:
+        - {statement: "O que o código abaixo imprime?", javaVersion: 17}
+    AnswerStatus:
+      type: string
+      enum: [COMPLETED, FAILED]
+    Answer:
+      type: object
+      required: [id, questionId, status, verifiedByExecution, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        questionId: {type: string, format: uuid}
+        jobId: {type: [string, 'null'], format: uuid}
+        status: {$ref: '#/components/schemas/AnswerStatus'}
+        chosenAlternative: {type: [string, 'null']}
+        explanation: {type: [string, 'null']}
+        steps:
+          type: [array, 'null']
+          items: {type: string}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/SourceRef'}
+        verifiedByExecution: {type: boolean, description: O código foi executado no sandbox e a resposta conferida.}
+        executionOutput: {type: [string, 'null']}
+        tier: {$ref: '#/components/schemas/NullableTier'}
+        model: {type: [string, 'null']}
+        errorMessage: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+      examples:
+        - id: aa11bb22-cc33-4d44-8e55-ff6677889900
+          questionId: c0ffee00-1111-4222-8333-444455556666
+          jobId: 0b0b0b0b-1111-4222-8333-0c0c0c0c0c0c
+          status: COMPLETED
+          chosenAlternative: a
+          explanation: A expressão 1 + 1 soma inteiros e imprime 2.
+          steps: ["1 + 1 é uma soma de ints", "println imprime 2"]
+          javaVersion: 17
+          confidence: 0.92
+          sources:
+            - {title: "JLS 15.18: Additive Operators", url: "https://docs.oracle.com/javase/specs/jls/se17/html/jls-15.html#jls-15.18", kind: JLS}
+          verifiedByExecution: true
+          executionOutput: "2"
+          tier: medium
+          model: qwen2.5:7b
+          errorMessage: null
+          createdAt: "2026-11-12T19:20:00Z"
+    JobStatus:
+      type: string
+      enum: [PENDING, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED]
+    Job:
+      type: object
+      required: [id, pdfDocumentId, status, tier, totalQuestions, completedQuestions, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        pdfDocumentId: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/JobStatus'}
+        tier: {$ref: '#/components/schemas/Tier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        totalQuestions: {type: integer, minimum: 0}
+        completedQuestions: {type: integer, minimum: 0}
+        errorMessage: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: [string, 'null'], format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+      examples:
+        - id: 0b0b0b0b-1111-4222-8333-0c0c0c0c0c0c
+          pdfDocumentId: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+          status: RUNNING
+          tier: medium
+          javaVersion: null
+          totalQuestions: 40
+          completedQuestions: 12
+          errorMessage: null
+          createdAt: "2026-11-12T19:15:00Z"
+          startedAt: "2026-11-12T19:15:02Z"
+          finishedAt: null
+    CreateJobRequest:
+      type: object
+      required: [tier]
+      properties:
+        tier: {$ref: '#/components/schemas/Tier'}
+        javaVersion: {$ref: '#/components/schemas/NullableJavaVersion'}
+        questionIds:
+          type: [array, 'null']
+          items: {type: string, format: uuid}
+          description: Subconjunto de questões. `null` = todas.
+        language: {$ref: '#/components/schemas/NullableLanguage'}
+      examples:
+        - {tier: medium, javaVersion: null, questionIds: null}
+    JobEstimate:
+      type: object
+      required: [tier, questions, basis]
+      properties:
+        tier: {$ref: '#/components/schemas/Tier'}
+        questions: {type: integer, minimum: 0}
+        estimatedSeconds: {type: [integer, 'null'], minimum: 0, description: "`null` se não há como estimar."}
+        basis:
+          type: string
+          enum: [MEASURED, HEURISTIC]
+          description: "`MEASURED` usa tokens/s medidos nesta máquina; `HEURISTIC` é um palpite por tamanho do modelo."
+      examples:
+        - {tier: medium, questions: 40, estimatedSeconds: 3600, basis: HEURISTIC}
+    JobStatusEvent:
+      type: object
+      required: [type, job]
+      properties:
+        type: {type: string, const: job_status}
+        job: {$ref: '#/components/schemas/Job'}
+      examples:
+        - type: job_status
+          job:
+            id: 0b0b0b0b-1111-4222-8333-0c0c0c0c0c0c
+            pdfDocumentId: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+            status: RUNNING
+            tier: medium
+            totalQuestions: 40
+            completedQuestions: 12
+            createdAt: "2026-11-12T19:15:00Z"
+    QuestionStartedEvent:
+      type: object
+      required: [type, questionId, ordinal]
+      properties:
+        type: {type: string, const: question_started}
+        questionId: {type: string, format: uuid}
+        ordinal: {type: integer, minimum: 1}
+      examples:
+        - {type: question_started, questionId: c0ffee00-1111-4222-8333-444455556666, ordinal: 13}
+    QuestionAnsweredEvent:
+      type: object
+      required: [type, questionId, answer]
+      properties:
+        type: {type: string, const: question_answered}
+        questionId: {type: string, format: uuid}
+        answer: {$ref: '#/components/schemas/Answer'}
+      examples:
+        - type: question_answered
+          questionId: c0ffee00-1111-4222-8333-444455556666
+          answer:
+            id: aa11bb22-cc33-4d44-8e55-ff6677889900
+            questionId: c0ffee00-1111-4222-8333-444455556666
+            status: COMPLETED
+            chosenAlternative: a
+            verifiedByExecution: false
+            createdAt: "2026-11-12T19:20:00Z"
+    QuestionFailedEvent:
+      type: object
+      required: [type, questionId, code, message]
+      properties:
+        type: {type: string, const: question_failed}
+        questionId: {type: string, format: uuid}
+        code: {$ref: '#/components/schemas/ErrorCode'}
+        message: {type: string}
+      examples:
+        - {type: question_failed, questionId: c0ffee00-1111-4222-8333-444455556666, code: INTERNAL_ERROR, message: "Tempo esgotado ao resolver a questão"}
+    JobStreamEvent:
+      description: Evento do stream de `GET /api/jobs/{jobId}/events`.
+      oneOf:
+        - {$ref: '#/components/schemas/JobStatusEvent'}
+        - {$ref: '#/components/schemas/QuestionStartedEvent'}
+        - {$ref: '#/components/schemas/QuestionAnsweredEvent'}
+        - {$ref: '#/components/schemas/QuestionFailedEvent'}
+        - {$ref: '#/components/schemas/SimpleDoneEvent'}
+        - {$ref: '#/components/schemas/ErrorEvent'}
+      discriminator:
+        propertyName: type
+        mapping:
+          job_status: '#/components/schemas/JobStatusEvent'
+          question_started: '#/components/schemas/QuestionStartedEvent'
+          question_answered: '#/components/schemas/QuestionAnsweredEvent'
+          question_failed: '#/components/schemas/QuestionFailedEvent'
+          done: '#/components/schemas/SimpleDoneEvent'
+          error: '#/components/schemas/ErrorEvent'
+
+    # -------------------------------------------------------------- Knowledge
+    CorpusSourceKind:
+      type: string
+      enum: [JAVADOC, JLS, JVMS, JEP, RELEASE_NOTES, TUTORIAL, MIGRATION_GUIDE]
+    CorpusSourceStatus:
+      type: string
+      enum: [PENDING, INGESTING, READY, FAILED]
+    CorpusSource:
+      type: object
+      required: [id, name, kind, baseUrl, status, chunkCount]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {$ref: '#/components/schemas/CorpusSourceKind'}
+        baseUrl: {type: string, format: uri}
+        licenseTerms: {type: [string, 'null']}
+        javaVersionMin: {$ref: '#/components/schemas/NullableJavaVersion'}
+        javaVersionMax: {$ref: '#/components/schemas/NullableJavaVersion'}
+        status: {$ref: '#/components/schemas/CorpusSourceStatus'}
+        chunkCount: {type: integer, minimum: 0}
+        lastIngestedAt: {type: [string, 'null'], format: date-time}
+        errorMessage: {type: [string, 'null']}
+      examples:
+        - id: 5e5e5e5e-1111-4222-8333-6f6f6f6f6f6f
+          name: Javadoc Java 21
+          kind: JAVADOC
+          baseUrl: https://docs.oracle.com/en/java/javase/21/docs/api/
+          licenseTerms: Uso local e pessoal; não redistribuir.
+          javaVersionMin: 21
+          javaVersionMax: 21
+          status: READY
+          chunkCount: 12840
+          lastIngestedAt: "2026-11-10T22:00:00Z"
+          errorMessage: null
+    JavaVersionInfo:
+      type: object
+      required: [version, label, releaseYear, lts, highlights]
+      properties:
+        version: {$ref: '#/components/schemas/JavaVersion'}
+        label: {type: string, description: "Ex.: `Java 21`."}
+        releaseYear: {type: integer}
+        lts: {type: boolean}
+        highlights:
+          type: array
+          items: {type: string}
+          description: Recursos marcantes da versão.
+      examples:
+        - {version: 21, label: Java 21, releaseYear: 2023, lts: true, highlights: [Virtual threads, Pattern matching para switch, Record patterns]}
+    KnowledgeHit:
+      type: object
+      required: [content, score, source]
+      properties:
+        content: {type: string, description: Trecho recuperado.}
+        score: {type: number, description: Similaridade (maior = mais relevante).}
+        source: {$ref: '#/components/schemas/SourceRef'}
+      examples:
+        - content: Records são classes que atuam como portadoras transparentes de dados imutáveis.
+          score: 0.83
+          source: {title: "JEP 395: Records", url: "https://openjdk.org/jeps/395", kind: JEP, javaVersionMin: 16}
+
+    # ---------------------------------------------------------------- Sandbox
+    RunCodeRequest:
+      type: object
+      required: [code, javaVersion]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 100000}
+        javaVersion: {$ref: '#/components/schemas/JavaVersion'}
+        mainClass: {type: [string, 'null'], description: "Classe com `main`. `null` = detectar."}
+        enablePreview: {type: boolean, default: false}
+        timeoutSeconds: {type: [integer, 'null'], minimum: 1, maximum: 60, description: "Limitado pelo teto configurado no servidor."}
+      examples:
+        - {code: "System.out.println(1 + 1);", javaVersion: 21}
+    CompileDiagnostic:
+      type: object
+      required: [message]
+      properties:
+        line: {type: [integer, 'null'], minimum: 1}
+        column: {type: [integer, 'null'], minimum: 1}
+        message: {type: string}
+    RunCodeResult:
+      type: object
+      required: [status, stdout, stderr, durationMs, javaVersion]
+      properties:
+        status: {type: string, enum: [SUCCESS, COMPILE_ERROR, RUNTIME_ERROR, TIMEOUT]}
+        stdout: {type: string}
+        stderr: {type: string}
+        exitCode: {type: [integer, 'null']}
+        compileErrors:
+          type: array
+          items: {$ref: '#/components/schemas/CompileDiagnostic'}
+        durationMs: {type: integer, minimum: 0}
+        javaVersion: {$ref: '#/components/schemas/JavaVersion'}
+      examples:
+        - {status: SUCCESS, stdout: "2\n", stderr: "", exitCode: 0, compileErrors: [], durationMs: 1840, javaVersion: 21}
+
+    # ----------------------------------------------------------------- System
+    SystemStatus:
+      type: object
+      required: [status, ollama, database, sandbox]
+      properties:
+        status: {type: string, enum: [UP, DEGRADED, DOWN]}
+        ollama:
+          type: object
+          required: [reachable]
+          properties:
+            reachable: {type: boolean}
+            version: {type: [string, 'null']}
+            baseUrl: {type: string}
+        database:
+          type: object
+          required: [up]
+          properties:
+            up: {type: boolean}
+        sandbox:
+          type: object
+          required: [available]
+          properties:
+            available: {type: boolean}
+            reason: {type: [string, 'null'], description: "Ex.: `Docker não está em execução`."}
+      examples:
+        - status: DEGRADED
+          ollama: {reachable: true, version: 0.40.3, baseUrl: "http://localhost:11434"}
+          database: {up: true}
+          sandbox: {available: false, reason: Docker não está em execução}

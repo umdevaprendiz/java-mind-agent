@@ -1,0 +1,10 @@
+# Configuração do lint do contrato (npx @redocly/cli lint api/openapi.yaml). Parte do conjunto "recommended".
+extends:
+  - recommended
+
+rules:
+  # GETs sem nenhum parâmetro (catálogo de modelos, configurações, status) não têm como responder 4xx.
+  operation-4xx-response: off
+  # Aplicação local e pessoal: não há licença própria nem servidor público; o servidor é o localhost.
+  info-license: off
+  no-server-example.com: off

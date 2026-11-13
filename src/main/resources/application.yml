@@ -22,6 +22,16 @@ spring:
 server:
   port: 8080
 
+springdoc:
+  swagger-ui:
+    # Contrato escrito à mão (api/openapi.yaml, F04) em primeiro; o spec gerado pelo código fica ao lado para comparar.
+    urls:
+      - name: Contrato (api/openapi.yaml)
+        url: /api-contract/openapi.yaml
+      - name: Implementação (gerado do código)
+        url: /v3/api-docs
+    urls-primary-name: Contrato (api/openapi.yaml)
+
 management:
   endpoints:
     web:
