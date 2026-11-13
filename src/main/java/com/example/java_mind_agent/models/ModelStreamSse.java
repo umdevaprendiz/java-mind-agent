@@ -55,7 +55,7 @@ final class ModelStreamSse {
 				"retryable", e.isRetryable()));
 	}
 
-	private static ServerSentEvent<Map<String, Object>> sse(String type, Map<String, Object> fields) {
+	static ServerSentEvent<Map<String, Object>> sse(String type, Map<String, Object> fields) {
 		Map<String, Object> data = new LinkedHashMap<>();
 		data.put("type", type);
 		data.putAll(fields);

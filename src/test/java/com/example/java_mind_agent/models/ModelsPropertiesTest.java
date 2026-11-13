@@ -9,6 +9,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +18,7 @@ import org.springframework.context.annotation.Configuration;
 import com.example.java_mind_agent.models.ModelsProperties.Capacity;
 import com.example.java_mind_agent.models.ModelsProperties.Debug;
 import com.example.java_mind_agent.models.ModelsProperties.Generation;
+import com.example.java_mind_agent.models.ModelsProperties.Pull;
 import com.example.java_mind_agent.models.ModelsProperties.TierProperties;
 import com.example.java_mind_agent.support.ModelsTestData;
 
@@ -56,7 +59,40 @@ class ModelsPropertiesTest {
 				assertThat(p.generation().temperature()).isEqualTo(0.3);
 				assertThat(p.generation().numCtx()).isEqualTo(4096);
 				assertThat(p.generation().firstTokenTimeout()).isEqualTo(Duration.ofMinutes(3));
+				assertThat(p.pull()).isEqualTo(new Pull(Duration.ofMinutes(2), Duration.ofMillis(250),
+						Duration.ofMinutes(5)));
 			});
+	}
+
+	@Test
+	void semBlocoPullNaConfiguracaoValemOsPadroes() {
+		Pull semNada = new Binder(new MapConfigurationPropertySource()).bindOrCreate("app.models.pull", Pull.class);
+
+		assertThat(semNada).isEqualTo(new Pull(Duration.ofMinutes(2), Duration.ofMillis(250), Duration.ofMinutes(5)));
+	}
+
+	@Test
+	void pullAceitaDuracoesEscritasNoYml() {
+		Pull configurado = new Binder(new MapConfigurationPropertySource(Map.of("app.models.pull.idle-timeout", "30s",
+				"app.models.pull.progress-interval", "0", "app.models.pull.warmup-timeout", "90s")))
+			.bindOrCreate("app.models.pull", Pull.class);
+
+		assertThat(configurado).isEqualTo(new Pull(Duration.ofSeconds(30), Duration.ZERO, Duration.ofSeconds(90)));
+	}
+
+	@Test
+	void pullComTempoOuIntervaloInvalidoFalhaCedo() {
+		assertThatThrownBy(() -> new Pull(Duration.ZERO, Duration.ofMillis(250), Duration.ofMinutes(5)))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("app.models.pull")
+			.hasMessageContaining("idle-timeout");
+		assertThatThrownBy(() -> new Pull(Duration.ofMinutes(2), Duration.ofMillis(-1), Duration.ofMinutes(5)))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Pull(Duration.ofMinutes(2), Duration.ofMillis(250), Duration.ofSeconds(-5)))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThat(new Pull(Duration.ofMinutes(2), Duration.ZERO, Duration.ofMinutes(5)).progressInterval())
+			.as("zero = sem limite de ritmo")
+			.isEqualTo(Duration.ZERO);
 	}
 
 	@Test
@@ -64,7 +100,8 @@ class ModelsPropertiesTest {
 		Map<Tier, TierProperties> semExtra = ModelsTestData.tiers();
 		semExtra.remove(Tier.EXTRA);
 
-		assertThatThrownBy(() -> new ModelsProperties(Tier.MEDIUM, generation(), new Capacity(1.3, 3), semExtra,
+		assertThatThrownBy(() -> new ModelsProperties(Tier.MEDIUM, generation(), new Capacity(1.3, 3),
+				ModelsTestData.pull(), semExtra,
 				ModelsTestData.embedding(null), false, new Debug(false)))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("quatro níveis")
@@ -73,7 +110,8 @@ class ModelsPropertiesTest {
 
 	@Test
 	void semNenhumTierTambemFalhaEmVezDeSubirVazio() {
-		assertThatThrownBy(() -> new ModelsProperties(Tier.MEDIUM, generation(), new Capacity(1.3, 3), null,
+		assertThatThrownBy(() -> new ModelsProperties(Tier.MEDIUM, generation(), new Capacity(1.3, 3),
+				ModelsTestData.pull(), null,
 				ModelsTestData.embedding(null), false, new Debug(false)))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("low")

@@ -281,7 +281,12 @@ paths:
       tags: [Models]
       operationId: pullModel
       summary: Baixa o modelo do tier, com progresso em streaming
-      description: Encerrar a conexão cancela o download. Dois downloads do mesmo modelo ao mesmo tempo retornam 409.
+      description: >-
+        Baixa o modelo no Ollama do tier (o `base-url` do tier, se tiver um). Os eventos `progress` somam todas as
+        camadas do modelo (`percent` pode recuar um pouco quando uma camada nova aparece); o stream termina com `done`
+        ou `error`. Encerrar a conexão cancela o download, e baixar de novo continua de onde parou. Baixar um modelo já
+        instalado o atualiza. Dois downloads do mesmo modelo ao mesmo tempo retornam 409. Um tier que não cabe nesta
+        máquina não é baixado (422): seria disco gasto à toa.
       responses:
         '200':
           description: Stream de progresso do download.
@@ -290,6 +295,11 @@ paths:
               schema: {$ref: '#/components/schemas/ModelPullStreamEvent'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: O modelo não cabe nesta máquina (`MODEL_DOES_NOT_FIT`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
 
   /api/models/{modelId}:
@@ -299,9 +309,13 @@ paths:
       tags: [Models]
       operationId: deleteModel
       summary: Remove o modelo do disco
+      description: >-
+        Descarrega o modelo da memória (se estiver lá) e o apaga do disco do Ollama; para usá-lo de novo é preciso
+        baixar. 404 se o id não existe ou o modelo não está instalado; 409 se ele está sendo baixado agora.
       responses:
         '204': {description: Removido.}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
 
   /api/models/{modelId}/warmup:
@@ -311,7 +325,9 @@ paths:
       tags: [Models]
       operationId: warmUpModel
       summary: Carrega o modelo na memória
-      description: Responde logo; acompanhe `loaded` em `GET /api/models`.
+      description: >-
+        Responde logo (202); o carregamento segue em segundo plano e aparece como `loaded` em `GET /api/models`.
+        Pedir de novo enquanto carrega não faz nada. Uma falha ao carregar (já depois da resposta) fica só no log.
       responses:
         '202': {description: Carregamento iniciado.}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -329,6 +345,8 @@ paths:
       tags: [Models]
       operationId: unloadModel
       summary: Descarrega o modelo da memória
+      description: >-
+        Idempotente: responde `204` também quando o modelo já não estava carregado (ou nem instalado).
       responses:
         '204': {description: Descarregado.}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -889,7 +907,7 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/ProblemDetail'}
     ServiceUnavailable:
-      description: Dependência indisponível (`OLLAMA_UNAVAILABLE`, `MODEL_NOT_INSTALLED` ou `SANDBOX_UNAVAILABLE`).
+      description: Dependência indisponível (`OLLAMA_UNAVAILABLE` ou `SANDBOX_UNAVAILABLE`). Modelo não instalado é `422`, não `503`.
       content:
         application/problem+json:
           schema: {$ref: '#/components/schemas/ProblemDetail'}
@@ -983,6 +1001,9 @@ components:
         detail: {type: string}
         instance: {type: string}
         code: {$ref: '#/components/schemas/ErrorCode'}
+        retryable:
+          type: boolean
+          description: Vale tentar de novo sem mudar nada (Ollama desligado ou ocupado). Ausente nos erros que não vêm de uma dependência.
         errors:
           type: array
           description: Preenchido em `VALIDATION_FAILED`.

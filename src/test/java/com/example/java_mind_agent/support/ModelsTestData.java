@@ -9,6 +9,7 @@ import com.example.java_mind_agent.models.ModelsProperties.Capacity;
 import com.example.java_mind_agent.models.ModelsProperties.Debug;
 import com.example.java_mind_agent.models.ModelsProperties.Embedding;
 import com.example.java_mind_agent.models.ModelsProperties.Generation;
+import com.example.java_mind_agent.models.ModelsProperties.Pull;
 import com.example.java_mind_agent.models.ModelsProperties.TierProperties;
 import com.example.java_mind_agent.models.Speed;
 import com.example.java_mind_agent.models.Tier;
@@ -30,13 +31,18 @@ public final class ModelsTestData {
 	public static ModelsProperties properties(Duration firstTokenTimeout, Duration idleTimeout) {
 		return new ModelsProperties(Tier.MEDIUM,
 				new Generation(0.3, 4096, "10m", firstTokenTimeout, idleTimeout, Duration.ZERO),
-				new Capacity(1.3, 3), tiers(), embedding(null), false, new Debug(false));
+				new Capacity(1.3, 3), pull(), tiers(), embedding(null), false, new Debug(false));
+	}
+
+	/** Sem espera entre eventos de progresso, para os testes verem todos; tempo de travamento curto. */
+	public static Pull pull() {
+		return new Pull(Duration.ofSeconds(5), Duration.ZERO, Duration.ofSeconds(10));
 	}
 
 	public static ModelsProperties properties(Tier defaultTier, Map<Tier, TierProperties> tiers, Embedding embedding) {
 		return new ModelsProperties(defaultTier,
 				new Generation(0.3, 4096, "10m", Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ZERO),
-				new Capacity(1.3, 3), tiers, embedding, false, new Debug(false));
+				new Capacity(1.3, 3), pull(), tiers, embedding, false, new Debug(false));
 	}
 
 	/** Os quatro tiers como no {@code application.yml}: Baixo 3B, Médio 7B, Forte 14B, Extra 32B. */

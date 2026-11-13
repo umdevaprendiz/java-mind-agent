@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,14 +74,14 @@ public class ModelCatalogService {
 		TierFitPolicy policy = new TierFitPolicy(properties.capacity());
 		Tier defaultTier = defaultTier();
 
-		List<Spec> chatSpecs = Arrays.stream(Tier.values())
-			.map(tier -> Spec.chat(tier, properties.tiers().get(tier), hosts))
+		List<ModelSpec> chatSpecs = Arrays.stream(Tier.values())
+			.map(tier -> ModelSpec.chat(tier, properties.tiers().get(tier), hosts))
 			.toList();
-		Spec embeddingSpec = Spec.embedding(properties.embedding(), hosts);
+		ModelSpec embeddingSpec = ModelSpec.embedding(properties.embedding(), hosts);
 
 		Map<String, CompletableFuture<HostSnapshot>> snapshots = new LinkedHashMap<>();
 		Stream.concat(chatSpecs.stream(), Stream.of(embeddingSpec))
-			.map(Spec::host)
+			.map(ModelSpec::host)
 			.distinct()
 			.forEach(host -> snapshots.put(host, CompletableFuture.supplyAsync(() -> snapshot(host), executor)));
 
@@ -95,6 +96,21 @@ public class ModelCatalogService {
 			.map(info -> info.withRecommended(recommended != null && info.id().equals(recommended.value())))
 			.toList();
 		return new ModelCatalog(machine, defaultTier, marked, embedding);
+	}
+
+	/** O modelo pelo id do contrato ({@code low}, {@code medium}, {@code strong}, {@code extra}, {@code embedding}). */
+	Optional<ModelSpec> spec(String id) {
+		if (ModelSpec.EMBEDDING_ID.equals(id)) {
+			return Optional.of(ModelSpec.embedding(properties.embedding(), hosts));
+		}
+		return Tier.find(id)
+			.filter(tier -> tier.value().equals(id))
+			.map(tier -> ModelSpec.chat(tier, properties.tiers().get(tier), hosts));
+	}
+
+	/** Estado de um só modelo, perguntando apenas ao Ollama dele (o host dos outros não atrasa nem derruba). */
+	ModelInfo describe(ModelSpec spec) {
+		return info(spec, snapshot(spec.host()), hardware.detect(), new TierFitPolicy(properties.capacity()));
 	}
 
 	/** A preferência salva em {@code app_setting} vence a configuração; banco fora do ar não impede o catálogo. */
@@ -125,9 +141,9 @@ public class ModelCatalogService {
 		return null;
 	}
 
-	private ModelInfo info(Spec spec, HostSnapshot snapshot, HardwareInfo machine, TierFitPolicy policy) {
+	private ModelInfo info(ModelSpec spec, HostSnapshot snapshot, HardwareInfo machine, TierFitPolicy policy) {
 		boolean remote = !hosts.isDefault(spec.host());
-		String name = normalize(spec.model());
+		String name = spec.normalizedModel();
 		InstalledModel found = snapshot.installed().get(name);
 		boolean installed = found != null;
 		Double sizeGb = found != null ? round(found.size() / GIB) : null;
@@ -166,10 +182,10 @@ public class ModelCatalogService {
 		OllamaAdminClient client = hosts.client(host);
 		try {
 			Map<String, InstalledModel> installed = new HashMap<>();
-			client.listInstalled().forEach(model -> installed.put(normalize(model.name()), model));
+			client.listInstalled().forEach(model -> installed.put(ModelSpec.normalize(model.name()), model));
 			Set<String> loaded = new HashSet<>();
 			try {
-				client.listLoaded().forEach(model -> loaded.add(normalize(model.name())));
+				client.listLoaded().forEach(model -> loaded.add(ModelSpec.normalize(model.name())));
 			}
 			catch (ModelException e) {
 				log.debug("Não consegui listar os modelos carregados em {}: {}", host, e.getMessage());
@@ -182,30 +198,10 @@ public class ModelCatalogService {
 		}
 	}
 
-	/** O Ollama trata {@code bge-m3} e {@code bge-m3:latest} como o mesmo modelo. */
-	private static String normalize(String model) {
-		return model.contains(":") ? model : model + ":latest";
-	}
-
 	private static double round(double value) {
 		return Math.round(value * 100.0) / 100.0;
 	}
 
 	private record HostSnapshot(boolean reachable, Map<String, InstalledModel> installed, Set<String> loaded) {
-	}
-
-	/** O que o catálogo precisa saber de cada modelo antes de consultar o Ollama. */
-	private record Spec(String id, Kind kind, String label, String description, String model, double minRamGb,
-			String host, Speed speed) {
-
-		static Spec chat(Tier tier, ModelsProperties.TierProperties tp, OllamaHosts hosts) {
-			return new Spec(tier.value(), Kind.CHAT, tp.label(), tp.description(), tp.ollamaModel(), tp.minRamGb(),
-					hosts.resolve(tp.baseUrl()), tp.speed());
-		}
-
-		static Spec embedding(ModelsProperties.Embedding e, OllamaHosts hosts) {
-			return new Spec("embedding", Kind.EMBEDDING, e.label(), e.description(), e.model(), e.minRamGb(),
-					hosts.resolve(e.baseUrl()), Speed.FAST);
-		}
 	}
 }

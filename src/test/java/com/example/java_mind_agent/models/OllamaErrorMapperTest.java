@@ -108,6 +108,97 @@ class OllamaErrorMapperTest {
 		assertThat(e.getMessage()).contains("causa real");
 	}
 
+	// ------------------------------------------------------------------ download (pull)
+
+	@Test
+	void nomeQueNaoExisteNoRegistroNaoViraModeloNaoInstalado() {
+		ModelException e = mapPull(http(404, "{\"error\":\"pull model manifest: file does not exist\"}"));
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.NOT_FOUND);
+		assertThat(e.isRetryable()).isFalse();
+		assertThat(e.getMessage()).contains("'m'").contains("não existe no registro").contains("ollama-model");
+	}
+
+	@Test
+	void semEspacoEmDiscoNaoValeTentarDeNovoSemLiberarEspaco() {
+		ModelException e = ollamaDisseNoStream("write /root/.ollama/blobs/x: no space left on device");
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
+		assertThat(e.isRetryable()).isFalse();
+		assertThat(e.getMessage()).contains("Sem espaço em disco").contains("'m'");
+	}
+
+	@Test
+	void arquivoCorrompidoPedeParaBaixarDeNovo() {
+		ModelException e = ollamaDisseNoStream("digest mismatch: expected sha256:aaa, got sha256:bbb");
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
+		assertThat(e.isRetryable()).isTrue();
+		assertThat(e.getMessage()).contains("corrompido");
+	}
+
+	@Test
+	void semInternetOuRegistroForaDoArEhOllamaUnavailableComRetomada() {
+		for (String mensagem : new String[] { "pull model manifest: Get \"https://registry.ollama.ai/v2/library/m/manifests/latest\": dial tcp: lookup registry.ollama.ai: no such host",
+				"read tcp 10.0.0.2:5000->104.21.0.1:443: i/o timeout", "net/http: TLS handshake timeout" }) {
+			ModelException e = ollamaDisseNoStream(mensagem);
+
+			assertThat(e.getCode()).as(mensagem).isEqualTo(ErrorCode.OLLAMA_UNAVAILABLE);
+			assertThat(e.isRetryable()).as(mensagem).isTrue();
+			assertThat(e.getMessage()).as(mensagem).contains("continua de onde parou");
+		}
+	}
+
+	@Test
+	void erroDesconhecidoDoDownloadMostraAMensagemDoOllama() {
+		ModelException e = ollamaDisseNoStream("algo inesperado");
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
+		assertThat(e.isRetryable()).isFalse();
+		assertThat(e.getMessage()).contains("algo inesperado");
+	}
+
+	@Test
+	void downloadSemDadosPorMuitoTempoEhTravamentoComRetomada() {
+		ModelException e = mapPull(new TimeoutException("idle"));
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.OLLAMA_UNAVAILABLE);
+		assertThat(e.isRetryable()).isTrue();
+		assertThat(e.getMessage()).contains("travado").contains("continua de onde parou");
+	}
+
+	@Test
+	void conexaoQueCaiDuranteODownloadAvisaQueDaParaRetomar() {
+		ModelException e = mapPull(new IllegalStateException("x", new IOException("Connection prematurely closed")));
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.OLLAMA_UNAVAILABLE);
+		assertThat(e.isRetryable()).isTrue();
+		assertThat(e.getMessage()).contains("caiu durante o download").contains("continua de onde parou");
+	}
+
+	@Test
+	void modelExceptionNoDownloadPassaSemSerEmbrulhada() {
+		var original = new ModelException(ErrorCode.CONFLICT, "x", false);
+
+		assertThat(mapPull(new RuntimeException("externo", original))).isSameAs(original);
+	}
+
+	@Test
+	void falhaDesconhecidaNoDownloadViraInternalError() {
+		ModelException e = mapPull(new IllegalStateException("causa real"));
+
+		assertThat(e.getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
+		assertThat(e.getMessage()).contains("causa real");
+	}
+
+	private static ModelException ollamaDisseNoStream(String mensagem) {
+		return OllamaErrorMapper.fromPullMessage("m", mensagem, 200);
+	}
+
+	private static ModelException mapPull(Throwable error) {
+		return OllamaErrorMapper.mapPull("m", error);
+	}
+
 	private static ModelException map(Throwable error) {
 		return OllamaErrorMapper.map("m", error);
 	}

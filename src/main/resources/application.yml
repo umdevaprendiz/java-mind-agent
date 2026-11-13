@@ -51,6 +51,14 @@ app:
       overhead-factor: 1.3
       # RAM (GiB) que não conta para o modelo: sistema, IDE, navegador, Postgres e Docker.
       reserved-ram-gb: 3
+    pull:
+      # Download sem dados por este tempo = travado. O tempo total não tem limite (modelos têm GBs); um download
+      # interrompido continua de onde parou ao baixar de novo.
+      idle-timeout: 2m
+      # Intervalo mínimo entre dois eventos de progresso enviados ao front (o Ollama manda dezenas por segundo).
+      progress-interval: 250ms
+      # Tempo máximo para carregar um modelo na memória ao aquecê-lo (em CPU, um 7B leva cerca de 40 s).
+      warmup-timeout: 5m
     # Cada tier aponta para um modelo do Ollama. Para usar outro computador com mais RAM/GPU em um tier, descomente
     # base-url (ex.: no extra); nesse caso o "cabe" é presumido. min-ram-gb em GiB; speed: fast | medium | slow | very_slow
     # (velocidade medida nesta máquina, só CPU: o 7B roda a ~2 tokens/s).

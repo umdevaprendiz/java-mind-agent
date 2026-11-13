@@ -16,7 +16,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      ({@code default.tier}) tem prioridade sobre este valor
  * @param generation    valores padrão de geração, usados quando a requisição não informa o seu
  * @param capacity      regra para decidir se um modelo cabe nesta máquina
- * @param tiers         o modelo de cada um dos quatro tiers; todos são obrigatórios
+ * @param pull          download de modelos pelo Ollama
+ * @param tiers        o modelo de cada um dos quatro tiers; todos são obrigatórios
  * @param embedding     o modelo de embedding do RAG
  * @param startupReport loga na subida o hardware e os tiers inviáveis
  * @param debug         recursos de depuração, desligados fora do perfil dev
@@ -26,6 +27,7 @@ public record ModelsProperties(
 		@DefaultValue("medium") Tier defaultTier,
 		@DefaultValue Generation generation,
 		@DefaultValue Capacity capacity,
+		@DefaultValue Pull pull,
 		Map<Tier, TierProperties> tiers,
 		@DefaultValue Embedding embedding,
 		@DefaultValue("true") boolean startupReport,
@@ -73,6 +75,28 @@ public record ModelsProperties(
 	 * @param reservedRamGb  RAM em GiB que não conta como disponível para o modelo
 	 */
 	public record Capacity(@DefaultValue("1.3") double overheadFactor, @DefaultValue("3") double reservedRamGb) {
+	}
+
+	/**
+	 * @param idleTimeout      tempo sem chegar nenhum dado do Ollama que faz o download ser dado como travado (o tempo
+	 *                         total não é limitado: um modelo de 9 GB leva o que a internet levar). Um download
+	 *                         interrompido é retomado de onde parou ao baixar de novo
+	 * @param progressInterval intervalo mínimo entre dois eventos de progresso enviados ao front; o Ollama manda
+	 *                         dezenas por segundo
+	 * @param warmupTimeout    tempo máximo para carregar um modelo na memória (em CPU, um 7B leva ~40 s)
+	 */
+	public record Pull(
+			@DefaultValue("2m") Duration idleTimeout,
+			@DefaultValue("250ms") Duration progressInterval,
+			@DefaultValue("5m") Duration warmupTimeout) {
+
+		public Pull {
+			if (idleTimeout.isNegative() || idleTimeout.isZero() || warmupTimeout.isNegative() || warmupTimeout.isZero()
+					|| progressInterval.isNegative()) {
+				throw new IllegalArgumentException(
+						"app.models.pull: idle-timeout e warmup-timeout precisam ser positivos e progress-interval não pode ser negativo");
+			}
+		}
 	}
 
 	/**

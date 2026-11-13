@@ -1,33 +1,21 @@
 package com.example.java_mind_agent.models;
 
+import org.jspecify.annotations.Nullable;
+
+import com.example.java_mind_agent.common.ApiException;
 import com.example.java_mind_agent.common.ErrorCode;
 
 /**
- * Falha ao falar com o Ollama, já traduzida para um {@link ErrorCode} do contrato e uma mensagem em português
- * pronta para mostrar ao usuário.
+ * Falha ao falar com o Ollama (ou ao gerenciar seus modelos), já traduzida para um {@link ErrorCode} do contrato e uma
+ * mensagem em português pronta para mostrar ao usuário.
  */
-public class ModelException extends RuntimeException {
-
-	private final ErrorCode code;
-
-	private final boolean retryable;
+public class ModelException extends ApiException {
 
 	public ModelException(ErrorCode code, String message, boolean retryable) {
-		this(code, message, retryable, null);
+		super(code, message, retryable);
 	}
 
-	public ModelException(ErrorCode code, String message, boolean retryable, Throwable cause) {
-		super(message, cause);
-		this.code = code;
-		this.retryable = retryable;
-	}
-
-	public ErrorCode getCode() {
-		return code;
-	}
-
-	/** Vale tentar de novo sem mudar nada (Ollama ocupado, desligado ou lento), em oposição a um erro permanente. */
-	public boolean isRetryable() {
-		return retryable;
+	public ModelException(ErrorCode code, String message, boolean retryable, @Nullable Throwable cause) {
+		super(code, message, retryable, cause);
 	}
 }
