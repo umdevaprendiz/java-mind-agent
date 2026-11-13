@@ -263,14 +263,16 @@ paths:
       tags: [Models]
       operationId: getModelCatalog
       summary: Catálogo de tiers, estado de instalação e hardware
-      description: Alimenta o seletor Baixo / Médio / Forte / Extra. Tier que não cabe na máquina vem com `available=false`.
+      description: >-
+        Alimenta o seletor Baixo / Médio / Forte / Extra. Tier que não pode ser usado vem com `available=false` e o
+        motivo em `unavailableReason`. Responde sempre 200: com o Ollama fora do ar, cada modelo daquele host vem como
+        `HOST_UNREACHABLE`, e o hardware continua informado para a tela poder explicar o problema.
       responses:
         '200':
           description: Catálogo.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ModelCatalog'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
 
   /api/models/{modelId}/pull:
     parameters:
@@ -1397,9 +1399,9 @@ components:
         minRamGb: {type: number, minimum: 0}
         installed: {type: boolean}
         loaded: {type: boolean, description: Está carregado na memória agora.}
-        fits: {type: boolean, description: Cabe na RAM livre desta máquina.}
-        supportsTools: {type: [boolean, 'null'], description: "`null` enquanto não instalado."}
-        available: {type: boolean, description: "`installed` e `fits`, ou host remoto alcançável."}
+        fits: {type: boolean, description: "Cabe nesta máquina: a RAM que o modelo pede é no máximo a RAM total menos a reserva do sistema (`hardware.totalRamGb`, não a livre, que oscila). Em host remoto é presumido `true`."}
+        supportsTools: {type: [boolean, 'null'], description: "`null` enquanto não instalado ou se o Ollama não informar."}
+        available: {type: boolean, description: "Pode ser usado agora: `installed`, `fits` e o host responde. Quando `false`, `unavailableReason` diz por quê."}
         unavailableReason:
           oneOf: [{$ref: '#/components/schemas/ModelUnavailableReason'}, {type: 'null'}]
         recommended: {type: boolean}

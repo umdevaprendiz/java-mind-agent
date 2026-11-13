@@ -29,6 +29,7 @@ import com.example.java_mind_agent.models.ModelStreamEvent.Completed;
 import com.example.java_mind_agent.models.ModelStreamEvent.FinishReason;
 import com.example.java_mind_agent.models.ModelStreamEvent.Thinking;
 import com.example.java_mind_agent.models.ModelStreamEvent.Token;
+import com.example.java_mind_agent.support.ModelsTestData;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
@@ -238,10 +239,7 @@ class OllamaChatServiceTest {
 	static OllamaChatService servico(String baseUrl) {
 		OllamaApi api = OllamaApi.builder().baseUrl(baseUrl).build();
 		OllamaChatModel model = OllamaChatModel.builder().ollamaApi(api).build();
-		var generation = new ModelsProperties.Generation(0.3, 4096, "10m", Duration.ofSeconds(5),
-				Duration.ofSeconds(5), Duration.ZERO);
-		return new OllamaChatService(ChatClient.builder(model),
-				new ModelsProperties(generation, new ModelsProperties.Debug(false)));
+		return new OllamaChatService(ChatClient.builder(model), ModelsTestData.properties());
 	}
 
 	static void responde(String... linhas) {

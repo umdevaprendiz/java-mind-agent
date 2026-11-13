@@ -2,11 +2,6 @@ package com.example.java_mind_agent.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -18,26 +13,24 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import com.example.java_mind_agent.chat.MessageRole;
 import com.example.java_mind_agent.common.ErrorCode;
 import com.example.java_mind_agent.knowledge.CorpusSourceKind;
 import com.example.java_mind_agent.knowledge.CorpusSourceStatus;
+import com.example.java_mind_agent.models.ModelInfo;
+import com.example.java_mind_agent.models.Speed;
+import com.example.java_mind_agent.models.Tier;
 import com.example.java_mind_agent.pdf.AnswerStatus;
 import com.example.java_mind_agent.pdf.JobStatus;
 import com.example.java_mind_agent.pdf.PdfStatus;
 import com.example.java_mind_agent.pdf.QuestionType;
+import com.example.java_mind_agent.support.OpenApiContract;
 import com.networknt.schema.Error;
 import com.networknt.schema.Schema;
-import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.SchemaRegistryConfig;
-import com.networknt.schema.SpecificationVersion;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -50,7 +43,6 @@ import tools.jackson.databind.node.ObjectNode;
  */
 class ApiContractTest {
 
-	private static final Path CONTRATO = Path.of("api", "openapi.yaml");
 	private static final String SCHEMAS = "#/components/schemas/";
 	private static final List<String> METODOS = List.of("get", "post", "put", "patch", "delete");
 	private static final JsonMapper MAPPER = JsonMapper.builder().build();
@@ -65,22 +57,7 @@ class ApiContractTest {
 			"minProperties", "maxProperties", "deprecated", "readOnly", "writeOnly", "contentMediaType",
 			"contentEncoding");
 
-	/** Formatos (uuid, date-time, uri...) passam a valer como regra, não só como anotação. */
-	private static final SchemaRegistry VALIDADORES = SchemaRegistry.withDefaultDialect(
-			SpecificationVersion.DRAFT_2020_12,
-			builder -> builder.schemaRegistryConfig(
-					SchemaRegistryConfig.builder().formatAssertionsEnabled(true).build()));
-
-	private static JsonNode contrato;
-
-	@BeforeAll
-	static void carregaOContrato() throws IOException {
-		LoaderOptions opcoes = new LoaderOptions();
-		opcoes.setAllowDuplicateKeys(false);
-		try (Reader leitor = Files.newBufferedReader(CONTRATO, StandardCharsets.UTF_8)) {
-			contrato = MAPPER.valueToTree(new Yaml(new SafeConstructor(opcoes)).load(leitor));
-		}
-	}
+	private static final JsonNode contrato = OpenApiContract.documento();
 
 	// ------------------------------------------------------------------ estrutura
 
@@ -378,6 +355,7 @@ class ApiContractTest {
 		esperados.put("JobStatus", JobStatus.class);
 		esperados.put("CorpusSourceKind", CorpusSourceKind.class);
 		esperados.put("CorpusSourceStatus", CorpusSourceStatus.class);
+		esperados.put("ModelUnavailableReason", ModelInfo.UnavailableReason.class);
 
 		esperados.forEach((nome, tipo) -> {
 			List<String> doContrato = new ArrayList<>();
@@ -386,6 +364,25 @@ class ApiContractTest {
 
 			assertThat(doContrato).as(nome).containsExactlyInAnyOrderElementsOf(doCodigo);
 		});
+	}
+
+	/** Estes enums vão para o JSON em minúsculas ({@code @JsonValue}), então o contrato lista o valor, não o nome. */
+	@Test
+	void enumsDeValorEmMinusculasDoContratoEspelhamOsEnumsDoCodigo() {
+		Map<String, List<String>> doCodigo = new LinkedHashMap<>();
+		doCodigo.put("Tier", Arrays.stream(Tier.values()).map(Tier::value).toList());
+		doCodigo.put("ModelId", Stream.concat(Arrays.stream(Tier.values()).map(Tier::value), Stream.of("embedding"))
+				.toList());
+
+		doCodigo.forEach((nome, valores) -> {
+			List<String> doContrato = new ArrayList<>();
+			contrato.at("/components/schemas/" + nome + "/enum").forEach(v -> doContrato.add(v.asString("")));
+			assertThat(doContrato).as(nome).containsExactlyElementsOf(valores);
+		});
+
+		List<String> velocidades = new ArrayList<>();
+		contrato.at("/components/schemas/ModelInfo/properties/speed/enum").forEach(v -> velocidades.add(v.asString("")));
+		assertThat(velocidades).containsExactlyElementsOf(Arrays.stream(Speed.values()).map(Speed::value).toList());
 	}
 
 	@Test
@@ -481,14 +478,7 @@ class ApiContractTest {
 		return unioes;
 	}
 
-	/**
-	 * Monta um schema JSON (Draft 2020-12, o mesmo dialeto do OpenAPI 3.1) que aponta para um componente e carrega
-	 * {@code components} junto, para os {@code $ref} internos resolverem.
-	 */
 	private static Schema schema(String componente) {
-		ObjectNode raiz = MAPPER.createObjectNode();
-		raiz.put("$ref", SCHEMAS + componente);
-		raiz.set("components", contrato.get("components"));
-		return VALIDADORES.getSchema(raiz);
+		return OpenApiContract.schema(componente);
 	}
 }

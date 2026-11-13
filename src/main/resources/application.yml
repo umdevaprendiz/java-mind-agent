@@ -43,6 +43,46 @@ app:
     # Origens autorizadas a chamar /api/** (front React em desenvolvimento).
     allowed-origins:
       - http://localhost:5173
+  models:
+    # Tier padrão enquanto o usuário não salvar outro (app_setting "default.tier").
+    default-tier: medium
+    capacity:
+      # RAM necessária = tamanho do modelo em disco x este fator (pesos + cache de contexto).
+      overhead-factor: 1.3
+      # RAM (GiB) que não conta para o modelo: sistema, IDE, navegador, Postgres e Docker.
+      reserved-ram-gb: 3
+    # Cada tier aponta para um modelo do Ollama. Para usar outro computador com mais RAM/GPU em um tier, descomente
+    # base-url (ex.: no extra); nesse caso o "cabe" é presumido. min-ram-gb em GiB; speed: fast | medium | slow | very_slow
+    # (velocidade medida nesta máquina, só CPU: o 7B roda a ~2 tokens/s).
+    tiers:
+      low:
+        label: Baixo
+        description: Respostas rápidas para dúvidas simples. Erra mais em perguntas difíceis.
+        ollama-model: qwen2.5:3b
+        min-ram-gb: 2.5
+        speed: fast
+      medium:
+        label: Médio
+        description: Uso geral, equilíbrio entre qualidade e velocidade.
+        ollama-model: qwen2.5:7b
+        min-ram-gb: 6
+        speed: slow
+      strong:
+        label: Forte
+        description: Mais preciso em código e questões difíceis, mas bem mais lento. Ocupa quase toda a RAM.
+        ollama-model: qwen2.5:14b
+        min-ram-gb: 12
+        speed: very_slow
+      extra:
+        label: Extra
+        description: O mais capaz, com raciocínio. Pede muita RAM ou GPU; use em outro computador.
+        ollama-model: qwen3:32b
+        min-ram-gb: 26
+        speed: very_slow
+        # base-url: http://meu-servidor:11434
+    embedding:
+      model: bge-m3
+      min-ram-gb: 1.5
 
 ---
 spring:

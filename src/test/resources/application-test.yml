@@ -26,3 +26,8 @@ management:
   health:
     db:
       enabled: false
+
+app:
+  models:
+    # Não consulta Ollama nem hardware na subida dos testes.
+    startup-report: false
