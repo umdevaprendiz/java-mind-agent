@@ -26,6 +26,7 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import com.example.java_mind_agent.chat.MessageRole;
+import com.example.java_mind_agent.common.ErrorCode;
 import com.example.java_mind_agent.knowledge.CorpusSourceKind;
 import com.example.java_mind_agent.knowledge.CorpusSourceStatus;
 import com.example.java_mind_agent.pdf.AnswerStatus;
@@ -369,6 +370,7 @@ class ApiContractTest {
 	@Test
 	void enumsDoContratoEspelhamOsEnumsDoCodigo() {
 		Map<String, Class<? extends Enum<?>>> esperados = new LinkedHashMap<>();
+		esperados.put("ErrorCode", ErrorCode.class);
 		esperados.put("MessageRole", MessageRole.class);
 		esperados.put("PdfStatus", PdfStatus.class);
 		esperados.put("QuestionType", QuestionType.class);

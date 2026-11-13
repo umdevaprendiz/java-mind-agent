@@ -55,6 +55,12 @@ management:
     health:
       show-details: always
 
+app:
+  models:
+    debug:
+      # POST /internal/models/stream: stream de qualquer modelo local, para testar e medir velocidade (F05).
+      endpoint-enabled: true
+
 ---
 spring:
   config:

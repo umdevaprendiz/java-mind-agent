@@ -966,6 +966,7 @@ components:
         - SANDBOX_UNAVAILABLE
         - PDF_NOT_READY
         - JOB_NOT_ACTIVE
+        - GENERATION_TIMEOUT
         - CANCELLED
         - INTERNAL_ERROR
       description: "Código estável para o front decidir a mensagem e a ação (ex.: oferecer baixar o modelo)."
