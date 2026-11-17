@@ -1,0 +1,248 @@
+{
+  "fonte": "Release notes e JEPs oficiais (openjdk.org, docs.oracle.com). As versões 26 e 27 foram conferidas em fontes secundárias; a F14 deve revisá-las contra as release notes oficiais.",
+  "releases": [
+    {
+      "version": 1,
+      "label": "Java 1.0 e 1.1",
+      "releaseYear": 1996,
+      "lts": false,
+      "highlights": ["Applets e AWT", "Classes internas e JavaBeans (1.1)", "Reflexão, JDBC e RMI (1.1)"],
+      "removed": [],
+      "deprecated": ["Muitos métodos do AWT e de Date já foram depreciados na 1.1"]
+    },
+    {
+      "version": 2,
+      "label": "Java 1.2",
+      "releaseYear": 1998,
+      "lts": false,
+      "highlights": ["Collections Framework", "Swing", "Compilador JIT", "Palavra-chave strictfp"],
+      "removed": [],
+      "deprecated": ["Thread.stop, Thread.suspend e Thread.resume"]
+    },
+    {
+      "version": 3,
+      "label": "Java 1.3",
+      "releaseYear": 2000,
+      "lts": false,
+      "highlights": ["HotSpot como JVM padrão", "Proxies dinâmicos", "JNDI e Java Sound"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 4,
+      "label": "Java 1.4",
+      "releaseYear": 2002,
+      "lts": false,
+      "highlights": ["Palavra-chave assert", "NIO (java.nio)", "Expressões regulares", "API de logging", "Exceções encadeadas"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 5,
+      "label": "Java 5",
+      "releaseYear": 2004,
+      "lts": false,
+      "highlights": ["Generics", "Anotações", "Enums", "For-each e varargs", "java.util.concurrent"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 6,
+      "label": "Java 6",
+      "releaseYear": 2006,
+      "lts": false,
+      "highlights": ["Scripting API (JSR 223)", "Compiler API", "Deque e NavigableMap", "Ganhos de desempenho na JVM"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 7,
+      "label": "Java 7",
+      "releaseYear": 2011,
+      "lts": false,
+      "highlights": ["Operador diamante", "try-with-resources", "Multi-catch", "String no switch", "NIO.2 (java.nio.file)"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 8,
+      "label": "Java 8",
+      "releaseYear": 2014,
+      "lts": true,
+      "highlights": ["Lambdas e referências a métodos", "Streams", "java.time", "Optional", "Métodos default em interfaces"],
+      "removed": ["PermGen (substituído pelo Metaspace)"],
+      "deprecated": []
+    },
+    {
+      "version": 9,
+      "label": "Java 9",
+      "releaseYear": 2017,
+      "lts": false,
+      "highlights": ["Módulos (JPMS)", "JShell", "List.of, Set.of e Map.of", "Métodos privados em interfaces", "G1 como GC padrão"],
+      "removed": ["rt.jar e tools.jar (nova estrutura do runtime)", "Mecanismo de endorsed standards e de extensões"],
+      "deprecated": ["Applet API (JEP 289)"]
+    },
+    {
+      "version": 10,
+      "label": "Java 10",
+      "releaseYear": 2018,
+      "lts": false,
+      "highlights": ["var em variáveis locais", "List.copyOf e coletores não modificáveis", "Class-Data Sharing de aplicações"],
+      "removed": ["Ferramenta javah (use javac -h)"],
+      "deprecated": []
+    },
+    {
+      "version": 11,
+      "label": "Java 11",
+      "releaseYear": 2018,
+      "lts": true,
+      "highlights": ["HttpClient padrão (java.net.http)", "var em parâmetros de lambda", "Novos métodos de String (isBlank, strip, repeat)", "Executar arquivo .java direto", "TLS 1.3"],
+      "removed": ["Módulos Java EE e CORBA (java.xml.bind/JAXB, JAX-WS, javax.activation, javax.annotation, CORBA; JEP 320)", "JavaFX separado do JDK", "Java Web Start e applets no navegador"],
+      "deprecated": ["Engine Nashorn (JEP 335)", "Pack200 (JEP 336)"]
+    },
+    {
+      "version": 12,
+      "label": "Java 12",
+      "releaseYear": 2019,
+      "lts": false,
+      "highlights": ["Expressões switch (preview)", "Collectors.teeing", "Shenandoah GC (experimental)"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 13,
+      "label": "Java 13",
+      "releaseYear": 2019,
+      "lts": false,
+      "highlights": ["Text blocks (preview)", "Expressões switch (2ª preview)", "ZGC devolve memória ao sistema"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 14,
+      "label": "Java 14",
+      "releaseYear": 2020,
+      "lts": false,
+      "highlights": ["Expressões switch (final)", "Records (preview)", "instanceof com padrão (preview)", "NullPointerException mais úteis"],
+      "removed": ["Concurrent Mark Sweep (CMS) GC", "Ferramentas do Pack200 (JEP 367)"],
+      "deprecated": []
+    },
+    {
+      "version": 15,
+      "label": "Java 15",
+      "releaseYear": 2020,
+      "lts": false,
+      "highlights": ["Text blocks (final)", "Sealed classes (preview)", "Records (2ª preview)", "ZGC e Shenandoah prontos para produção"],
+      "removed": ["Engine Nashorn e ferramenta jjs (JEP 372)"],
+      "deprecated": ["Biased locking"]
+    },
+    {
+      "version": 16,
+      "label": "Java 16",
+      "releaseYear": 2021,
+      "lts": false,
+      "highlights": ["Records (final)", "instanceof com padrão (final)", "Stream.toList()", "Encapsulamento forte dos internos do JDK (padrão)"],
+      "removed": [],
+      "deprecated": ["Classes baseadas em valor, como Integer e Optional (construtores e sincronização; JEP 390)"]
+    },
+    {
+      "version": 17,
+      "label": "Java 17",
+      "releaseYear": 2021,
+      "lts": true,
+      "highlights": ["Sealed classes (final)", "Novos geradores aleatórios (RandomGenerator)", "Encapsulamento forte dos internos do JDK", "Pattern matching para switch (preview)"],
+      "removed": ["RMI Activation (JEP 407)", "Opção --illegal-access (JEP 403)", "Compilador Graal AOT/JIT experimental (JEP 410)"],
+      "deprecated": ["Security Manager, para remoção (JEP 411)", "Applet API, para remoção (JEP 398)"]
+    },
+    {
+      "version": 18,
+      "label": "Java 18",
+      "releaseYear": 2022,
+      "lts": false,
+      "highlights": ["UTF-8 como charset padrão", "Servidor web simples (jwebserver)", "@snippet no Javadoc"],
+      "removed": [],
+      "deprecated": ["Finalização (Object.finalize), para remoção (JEP 421)"]
+    },
+    {
+      "version": 19,
+      "label": "Java 19",
+      "releaseYear": 2022,
+      "lts": false,
+      "highlights": ["Virtual threads (preview)", "Record patterns (preview)", "Structured concurrency (incubadora)"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 20,
+      "label": "Java 20",
+      "releaseYear": 2023,
+      "lts": false,
+      "highlights": ["Scoped values (incubadora)", "Virtual threads (2ª preview)", "Record patterns (2ª preview)"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 21,
+      "label": "Java 21",
+      "releaseYear": 2023,
+      "lts": true,
+      "highlights": ["Virtual threads (final)", "Pattern matching para switch (final)", "Record patterns (final)", "Sequenced collections", "ZGC geracional"],
+      "removed": [],
+      "deprecated": ["Porta Windows x86 de 32 bits, para remoção (JEP 449)"]
+    },
+    {
+      "version": 22,
+      "label": "Java 22",
+      "releaseYear": 2024,
+      "lts": false,
+      "highlights": ["Variáveis e padrões sem nome (_)", "API de Foreign Function & Memory (final)", "Executar programas de vários arquivos de origem"],
+      "removed": [],
+      "deprecated": []
+    },
+    {
+      "version": 23,
+      "label": "Java 23",
+      "releaseYear": 2024,
+      "lts": false,
+      "highlights": ["Markdown em comentários Javadoc", "ZGC geracional como padrão", "Importação de módulos (preview)"],
+      "removed": [],
+      "deprecated": ["Métodos de acesso à memória de sun.misc.Unsafe, para remoção (JEP 471)"]
+    },
+    {
+      "version": 24,
+      "label": "Java 24",
+      "releaseYear": 2025,
+      "lts": false,
+      "highlights": ["Stream Gatherers (final)", "Class-File API (final)", "Cache de classes ahead-of-time (JEP 483)", "Criptografia pós-quântica (ML-KEM e ML-DSA)", "Virtual threads sem pinning em synchronized"],
+      "removed": ["Porta Windows x86 de 32 bits (JEP 479)"],
+      "deprecated": ["Porta x86 de 32 bits, para remoção (JEP 501)"]
+    },
+    {
+      "version": 25,
+      "label": "Java 25",
+      "releaseYear": 2025,
+      "lts": true,
+      "highlights": ["Arquivos de origem compactos e main de instância (final)", "Scoped values (final)", "Importação de módulos (final)", "Construtores flexíveis (final)", "Cabeçalhos de objeto compactos"],
+      "removed": ["Porta x86 de 32 bits (JEP 503)"],
+      "deprecated": []
+    },
+    {
+      "version": 26,
+      "label": "Java 26",
+      "releaseYear": 2026,
+      "lts": false,
+      "highlights": ["HTTP/3 no HttpClient", "Cache de objetos ahead-of-time com qualquer GC", "Avisos ao alterar campos final por reflexão (JEP 500)"],
+      "removed": ["Applet API (JEP 504)", "Thread.stop()"],
+      "deprecated": []
+    },
+    {
+      "version": 27,
+      "label": "Java 27",
+      "releaseYear": 2026,
+      "lts": false,
+      "highlights": ["G1 como GC padrão em qualquer ambiente", "Cabeçalhos de objeto compactos por padrão", "Troca de chaves híbrida pós-quântica no TLS 1.3", "Redação de dados no JFR"],
+      "removed": ["Interface do compilador JVMCI", "Opção LockingMode"],
+      "deprecated": []
+    }
+  ]
+}

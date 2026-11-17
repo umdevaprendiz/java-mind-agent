@@ -91,6 +91,12 @@ app:
     embedding:
       model: bge-m3
       min-ram-gb: 1.5
+  knowledge:
+    # Versão do Java assumida quando nada indica outra (nem a pergunta, nem a conversa, nem o código, nem as
+    # preferências). Vazio = a LTS mais recente do registro (src/main/resources/knowledge/java-versions.json).
+    # default-java-version: 25
+    # Versão assumida quando a pessoa pede uma "versão antiga" sem dizer qual.
+    legacy-java-version: 8
 
 ---
 spring:
