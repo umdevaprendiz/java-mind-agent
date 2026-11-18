@@ -1,0 +1,6 @@
+/* Tema (preto por padrão, claro opcional), base e telas do JMA. */
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/chat.css';
+@import './styles/screens.css';
+@import './styles/pdf.css';

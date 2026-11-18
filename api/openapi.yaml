@@ -88,6 +88,13 @@ paths:
 
         Falhas antes do início do stream (conversa inexistente, Ollama fora do ar, modelo não instalado) voltam como
         `problem+json`; depois do início, como evento `error`.
+
+        **Nível (`tier`).** Cada requisição escolhe o seu; sem `tier` (ou `null`) vale o padrão de `GET /api/settings`.
+        O app **nunca troca de nível em silêncio**: se o escolhido não pode responder agora, a resposta é um erro que
+        diz o que fazer — `MODEL_NOT_INSTALLED` (baixe o modelo), `MODEL_DOES_NOT_FIT` (não cabe na memória) ou
+        `OLLAMA_UNAVAILABLE` (o Ollama daquele nível está fora do ar) — com `tier` (o que falhou) e, se houver,
+        `suggestedTier` (um nível menor que já dá para usar). Para usar a sugestão, reenvie a mensagem com esse `tier`.
+        Trocar de nível no meio da conversa é só mandar outro `tier`: o histórico é da conversa, não do modelo.
       requestBody:
         required: true
         content:
@@ -103,6 +110,11 @@ paths:
               schema: {$ref: '#/components/schemas/ChatStreamEvent'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: O nível escolhido não pode responder agora (`MODEL_NOT_INSTALLED` ou `MODEL_DOES_NOT_FIT`). Traz `tier` e, se houver, `suggestedTier`.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
         '500': {$ref: '#/components/responses/InternalError'}
 
@@ -368,6 +380,10 @@ paths:
       tags: [Settings]
       operationId: updateSettings
       summary: Substitui as preferências
+      description: >-
+        Grava as três preferências de uma vez; `defaultJavaVersion: null` volta ao automático. O `defaultTier` é o que
+        vale quando uma requisição de chat não escolhe nível. Aceita qualquer um dos quatro níveis, mesmo um que não
+        caiba nesta máquina: nesse caso o chat sem `tier` responde o erro acionável de `POST /api/chat`.
       requestBody:
         required: true
         content:
@@ -1004,6 +1020,12 @@ components:
         retryable:
           type: boolean
           description: Vale tentar de novo sem mudar nada (Ollama desligado ou ocupado). Ausente nos erros que não vêm de uma dependência.
+        tier:
+          $ref: '#/components/schemas/Tier'
+          description: Nível que falhou (`MODEL_NOT_INSTALLED`, `MODEL_DOES_NOT_FIT`, `OLLAMA_UNAVAILABLE` de um nível). Vem preenchido mesmo quando a requisição não escolheu nível e valeu o padrão.
+        suggestedTier:
+          $ref: '#/components/schemas/Tier'
+          description: Nível **menor** que dá para usar no lugar (instalado e que cabe; se não houver, um que cabe mas precisa ser baixado). É só uma sugestão — o app nunca troca de nível sozinho. Ausente quando não há nenhum.
         errors:
           type: array
           description: Preenchido em `VALIDATION_FAILED`.
@@ -1231,8 +1253,14 @@ components:
         code: {$ref: '#/components/schemas/ErrorCode'}
         message: {type: string}
         retryable: {type: boolean, default: false}
+        tier:
+          $ref: '#/components/schemas/Tier'
+          description: Nível que falhou, quando o erro é de um nível (ver `ProblemDetail.tier`).
+        suggestedTier:
+          $ref: '#/components/schemas/Tier'
+          description: Nível menor que dá para usar no lugar (ver `ProblemDetail.suggestedTier`).
       examples:
-        - {type: error, code: MODEL_NOT_INSTALLED, message: "O modelo do tier Forte não está instalado.", retryable: false}
+        - {type: error, code: MODEL_NOT_INSTALLED, message: "O modelo do tier Forte não está instalado.", retryable: false, tier: strong, suggestedTier: medium}
     SimpleDoneEvent:
       type: object
       description: Fim normal de streams sem payload final (download de modelo, PDF, lote).

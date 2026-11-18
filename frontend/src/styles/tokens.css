@@ -1,0 +1,61 @@
+/* Preto por padrão, cinzas neutros (sem creme), um acento só: azul Java. O marrom fica na marca e nas xícaras.
+   O tema claro é branco puro. Letra: Atkinson Hyperlegible; código: JetBrains Mono. */
+:root {
+  color-scheme: dark;
+  --fh: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --fb: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fm: 'JetBrains Mono Variable', ui-monospace, Consolas, monospace;
+
+  --bg: #0a0a0b;
+  --surface: #151517;
+  --surface2: #1f1f22;
+  --line: #2a2a2e;
+  --edge: rgba(255, 255, 255, 0.09);
+  --text: #f4f4f5;
+  --mute: #9d9da6;
+  --brand: #c98457;
+  --coffee: #c98457;
+  --bubble: #222226;
+  --action: #5aa2e8;
+  --on-action: #04111f;
+  --action-soft: #0f2133;
+  --ok: #5fd0a0;
+  --ok-soft: #0f2519;
+  --warn: #f0b454;
+  --warn-soft: #2a2010;
+  --danger: #ff8a80;
+  --danger-soft: #2d1513;
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.55);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 44px rgba(0, 0, 0, 0.7);
+  --topshadow: 0 1px 0 var(--line), 0 10px 24px -12px rgba(0, 0, 0, 0.7);
+  --pshadow: 0 2px 12px rgba(90, 162, 232, 0.28);
+  --veil: rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface2: #f3f3f4;
+  --line: #e6e6e9;
+  --edge: rgba(0, 0, 0, 0.06);
+  --text: #111113;
+  --mute: #6c6c74;
+  --brand: #8b4a2b;
+  --coffee: #8b4a2b;
+  --bubble: #f3f3f4;
+  --action: #2f6fa8;
+  --on-action: #ffffff;
+  --action-soft: #e6eff8;
+  --ok: #1f7a55;
+  --ok-soft: #e3f2ea;
+  --warn: #9a6a1f;
+  --warn-soft: #f7efd9;
+  --danger: #b3261e;
+  --danger-soft: #fbe9e7;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 3px 10px rgba(0, 0, 0, 0.07);
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 14px 34px rgba(0, 0, 0, 0.13);
+  --topshadow: 0 1px 0 var(--line), 0 8px 20px -10px rgba(0, 0, 0, 0.14);
+  --pshadow: 0 2px 8px rgba(47, 111, 168, 0.32);
+  --veil: rgba(0, 0, 0, 0.4);
+}

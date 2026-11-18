@@ -1,0 +1,440 @@
+/* Conversa: mensagens, Markdown, blocos de código, campo de pergunta e seletor de Java. */
+.jma-chat {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.jma-chat__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 28px 8px;
+}
+.jma-chat__col {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.jma-chat__new {
+  align-self: flex-end;
+}
+.jma-chat__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8vh 0 0;
+}
+.jma-chat__empty h2 {
+  font: 700 28px/1.25 var(--fh);
+  letter-spacing: -0.01em;
+}
+.jma-chat__empty p {
+  color: var(--mute);
+}
+.jma-chat__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.jma-chat__suggestions .jma-chip {
+  white-space: normal;
+  text-align: left;
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.jma-chat__foot {
+  flex: none;
+  padding: 8px 28px 16px;
+}
+.jma-chat__foot > * {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.jma-hint {
+  margin-top: 8px;
+  text-align: center;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+/* mensagens */
+.jma-msg--user {
+  align-self: flex-end;
+  max-width: 82%;
+  padding: 10px 16px;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--bubble);
+  border: 1px solid var(--edge);
+  box-shadow: var(--shadow-sm);
+}
+.jma-msg__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jma-msg--assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jma-msg__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jma-msg__who {
+  font: 700 15px var(--fh);
+  letter-spacing: 0.02em;
+}
+.jma-msg__meta {
+  color: var(--mute);
+  font-size: 13px;
+}
+.jma-msg__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 32px;
+  min-width: 0;
+}
+.jma-msg__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jma-phase {
+  display: flex;
+  align-items: center;
+  color: var(--mute);
+}
+.jma-think {
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+  color: var(--mute);
+  font-size: 14px;
+}
+.jma-think summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.jma-think p {
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
+.jma-msg[data-status='streaming'] .jma-md > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  background: var(--action);
+  animation: jma-blink 1s steps(2, start) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jma-msg[data-status='streaming'] .jma-md > :last-child::after {
+    animation: none;
+  }
+}
+
+/* Markdown */
+.jma-md {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.jma-md ul,
+.jma-md ol {
+  padding-left: 22px;
+}
+.jma-md ul {
+  list-style: disc;
+}
+.jma-md ol {
+  list-style: decimal;
+}
+.jma-md li + li {
+  margin-top: 4px;
+}
+.jma-md li::marker {
+  color: var(--mute);
+}
+.jma-code {
+  margin: 0;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.jma-code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 14px;
+  background: var(--surface2);
+  color: var(--mute);
+  font-size: 12.5px;
+}
+.jma-code__lang {
+  font-family: var(--fm);
+  text-transform: lowercase;
+}
+.jma-code__copy {
+  padding: 3px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.jma-code__copy:hover {
+  background: var(--line);
+}
+.jma-code pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font: 400 13.5px/1.6 var(--fm);
+  tab-size: 4;
+}
+.jma-code pre code {
+  padding: 0;
+  background: none;
+  font: inherit;
+}
+
+/* campo de pergunta */
+.jma-composer {
+  width: 100%;
+}
+.jma-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 12px 10px 18px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+.jma-field:focus-within {
+  border-color: var(--action);
+}
+.jma-composer__input {
+  width: 100%;
+  min-height: 28px;
+  max-height: 180px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: none;
+  line-height: 1.55;
+  font-size: 16px;
+}
+.jma-composer__input::placeholder {
+  color: var(--mute);
+}
+.jma-composer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.jma-composer__tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jma-send {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--action);
+  color: var(--on-action);
+  box-shadow: var(--pshadow);
+}
+.jma-send:disabled {
+  background: var(--surface2);
+  color: var(--mute);
+  box-shadow: none;
+  opacity: 1;
+}
+.jma-send--stop {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+/* seletor da versão do Java */
+.jma-java {
+  display: inline-flex;
+}
+.jma-java__select {
+  appearance: none;
+  padding: 5px 30px 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--surface2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d9da6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.jma-java__select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Conversa (layout Mesa): chat + bancada */
+.jma-table {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  padding: 0 24px 20px 0;
+}
+.jma-bench {
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+  margin-top: 20px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.jma-bench h3 {
+  margin-bottom: 8px;
+  font: 700 13px var(--fb);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.jma-bench__empty {
+  color: var(--mute);
+  font-size: 14px;
+}
+.jma-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.jma-tool {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: 14px;
+}
+.jma-tool__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mute);
+  transform: translateY(-1px);
+}
+.jma-tool[data-state='running'] .jma-tool__dot {
+  background: var(--action);
+  animation: jma-blink 1.2s infinite ease-in-out;
+}
+.jma-tool[data-state='ok'] .jma-tool__dot {
+  background: var(--ok);
+}
+.jma-tool[data-state='failed'] .jma-tool__dot {
+  background: var(--danger);
+}
+.jma-tool__name {
+  font-weight: 700;
+}
+.jma-tool__time {
+  color: var(--mute);
+  font-size: 12.5px;
+}
+.jma-tool__summary,
+.jma-tool__output {
+  grid-column: 2 / -1;
+  color: var(--mute);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.jma-tool__output {
+  display: block;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+.jma-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.jma-sources li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.jma-sources em {
+  flex: none;
+  font: 400 12px var(--fm);
+  color: var(--mute);
+  font-style: normal;
+}
+.jma-sources a {
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.jma-sources a:hover {
+  text-decoration: underline;
+}
+.jma-sources__kind {
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--mute);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.jma-bench__mem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.jma-bench__memrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .jma-table {
+    grid-template-columns: minmax(0, 1fr);
+    padding-right: 0;
+  }
+  .jma-bench {
+    display: none;
+  }
+}

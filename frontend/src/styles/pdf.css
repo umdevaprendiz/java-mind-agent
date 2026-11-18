@@ -1,0 +1,322 @@
+/* Provas: fluxo de PDF (enviar → ler → revisar → resolver → gabarito). */
+.jma-pdf {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 880px;
+}
+.jma-pdf__head h2 {
+  font: 700 26px/1.25 var(--fh);
+}
+.jma-pdf__head p {
+  margin-top: 4px;
+  color: var(--mute);
+}
+.jma-pdf__idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.jma-drop {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 44px 24px;
+  border: 2px dashed var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  cursor: pointer;
+}
+.jma-drop:hover,
+.jma-drop[data-over='true'],
+.jma-drop:focus-within {
+  border-color: var(--action);
+  background: var(--action-soft);
+}
+.jma-drop__icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface2);
+  color: var(--action);
+}
+.jma-drop__text {
+  font: 700 17px var(--fh);
+}
+.jma-drop small {
+  color: var(--mute);
+}
+.jma-pdf__actions {
+  display: flex;
+  gap: 8px;
+}
+.jma-pdf__processing,
+.jma-pdf__review,
+.jma-pdf__solving,
+.jma-pdf__results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.jma-pdf__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+.jma-pdf__bar p {
+  color: var(--mute);
+  font-size: 14px;
+}
+.jma-pdf__file {
+  font: 700 17px var(--fh);
+  overflow-wrap: anywhere;
+}
+.jma-pdf__processing {
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+.jma-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: step;
+}
+.jma-steps li {
+  counter-increment: step;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--mute);
+}
+.jma-steps li::before {
+  content: counter(step);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface2);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.jma-steps li[data-state='active'] {
+  color: var(--text);
+  font-weight: 700;
+}
+.jma-steps li[data-state='active']::before {
+  background: var(--action);
+  color: var(--on-action);
+}
+.jma-steps li[data-state='done']::before {
+  content: '✓';
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.jma-pdf__solve {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.jma-pdf__estimate {
+  font-size: 13.5px;
+}
+.jma-pdf__estimate small {
+  color: var(--mute);
+}
+.jma-pdf__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jma-pdf__list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* questão */
+.jma-q {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.jma-q[data-state='current'] {
+  border-color: var(--action);
+}
+.jma-q[data-state='failed'] {
+  border-color: var(--danger);
+}
+.jma-q[data-review='true'] {
+  border-color: var(--warn);
+}
+.jma-q__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.jma-q__num {
+  font: 700 16px var(--fh);
+}
+.jma-q__type,
+.jma-q__page,
+.jma-q__java {
+  color: var(--mute);
+}
+.jma-q__statement {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jma-alts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jma-alts li {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--surface2);
+  overflow-wrap: anywhere;
+}
+.jma-alts li b {
+  margin-right: 6px;
+}
+.jma-alts li[data-chosen='true'] {
+  background: var(--action-soft);
+  box-shadow: inset 0 0 0 1px var(--action);
+}
+
+/* resposta */
+.jma-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface2);
+}
+.jma-answer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.jma-answer__chosen {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.jma-answer__chosen strong {
+  font: 700 22px var(--fh);
+  color: var(--action);
+}
+.jma-answer__label {
+  color: var(--mute);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.jma-answer__badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.jma-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mute);
+  font-size: 13px;
+}
+.jma-confidence .jma-bar {
+  width: 70px;
+}
+.jma-answer__text {
+  overflow-wrap: anywhere;
+}
+.jma-answer__steps {
+  padding-left: 22px;
+  list-style: decimal;
+}
+.jma-answer__steps li + li {
+  margin-top: 3px;
+}
+.jma-answer__output code {
+  display: inline-block;
+  max-width: 100%;
+  white-space: pre-wrap;
+  background: var(--bg);
+}
+
+/* baixar gabarito */
+.jma-export {
+  position: relative;
+}
+.jma-export__pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: 280px;
+  padding: 6px;
+}
+.jma-export__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+.jma-export__item:hover {
+  background: var(--surface2);
+}
+.jma-export__item svg {
+  color: var(--action);
+  flex: none;
+}
+.jma-export__item span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.jma-export__item small {
+  color: var(--mute);
+  font-size: 13px;
+}
+.jma-export__item code {
+  color: var(--mute);
+  background: none;
+  padding: 0;
+}

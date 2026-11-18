@@ -17,17 +17,17 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 
-import com.example.java_mind_agent.chat.MessageRole;
-import com.example.java_mind_agent.common.ErrorCode;
-import com.example.java_mind_agent.knowledge.CorpusSourceKind;
-import com.example.java_mind_agent.knowledge.CorpusSourceStatus;
-import com.example.java_mind_agent.models.ModelInfo;
+import com.example.java_mind_agent.chat.domain.MessageRole;
+import com.example.java_mind_agent.common.error.ErrorCode;
+import com.example.java_mind_agent.knowledge.corpus.CorpusSourceKind;
+import com.example.java_mind_agent.knowledge.corpus.CorpusSourceStatus;
+import com.example.java_mind_agent.models.catalog.ModelInfo;
 import com.example.java_mind_agent.models.Speed;
 import com.example.java_mind_agent.models.Tier;
-import com.example.java_mind_agent.pdf.AnswerStatus;
-import com.example.java_mind_agent.pdf.JobStatus;
-import com.example.java_mind_agent.pdf.PdfStatus;
-import com.example.java_mind_agent.pdf.QuestionType;
+import com.example.java_mind_agent.pdf.domain.AnswerStatus;
+import com.example.java_mind_agent.pdf.domain.JobStatus;
+import com.example.java_mind_agent.pdf.domain.PdfStatus;
+import com.example.java_mind_agent.pdf.domain.QuestionType;
 import com.example.java_mind_agent.support.OpenApiContract;
 import com.networknt.schema.Error;
 import com.networknt.schema.Schema;

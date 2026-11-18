@@ -1,0 +1,297 @@
+/* Telas: Início, Níveis e Provas (lista e painel de PDF). */
+
+/* ---- Início ---- */
+.jma-home {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 7vh 28px 32px;
+}
+.jma-home__col {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.jma-home h1 {
+  font-size: 40px;
+  line-height: 1.15;
+}
+.jma-home__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 6px;
+}
+.jma-home__recent h2 {
+  margin-bottom: 8px;
+  font: 700 13px var(--fb);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.jma-home__recent ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jma-home__recent button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  font-weight: 700;
+}
+.jma-home__recent button:hover {
+  border-color: var(--action);
+}
+.jma-home__title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+}
+.jma-home__title > span,
+.jma-home__title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jma-home__title small {
+  font-weight: 400;
+  font-size: 13.5px;
+}
+.jma-home__recent button > span:last-child {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+/* ---- Níveis ---- */
+.jma-levels {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 36px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.jma-levels__head h1 {
+  font-size: 32px;
+  line-height: 1.2;
+}
+.jma-levels__head p {
+  max-width: 620px;
+  margin-top: 6px;
+}
+.jma-levels__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.jma-cupcard {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.jma-cupcard[data-selected='true'] {
+  border-color: var(--action);
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px var(--action);
+}
+.jma-cupcard[data-status='no-fit'] {
+  background: transparent;
+  box-shadow: none;
+  border-style: dashed;
+  border-color: var(--line);
+}
+.jma-cupcard__hit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px 14px;
+  text-align: center;
+}
+.jma-cupcard__hit[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.jma-cupcard__name {
+  margin-top: 6px;
+  font-size: 22px;
+}
+.jma-cupcard__desc {
+  font-size: 14px;
+  line-height: 1.45;
+}
+.jma-cupcard__hit small {
+  font-size: 13px;
+}
+.jma-cupcard__hit .jma-badge {
+  margin-top: 4px;
+}
+.jma-tieraction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+.jma-tieraction:empty {
+  display: none;
+}
+.jma-tieraction__warn {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+.jma-pull {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jma-pull__text {
+  color: var(--mute);
+  font-size: 13px;
+  text-align: center;
+}
+.jma-levels__foot {
+  padding: 16px 20px;
+}
+.jma-levels__mem {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+/* ---- Provas ---- */
+.jma-exams {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px 24px 20px 24px;
+}
+.jma-exams__list {
+  align-self: start;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.jma-exams__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.jma-exams__head h2 {
+  font: 700 16px var(--fh);
+}
+.jma-exams__list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.jma-exams__item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  text-align: left;
+}
+.jma-exams__item strong {
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+}
+.jma-exams__item:hover,
+.jma-exams__item[aria-current='true'] {
+  background: var(--surface2);
+}
+.jma-exams__main {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .jma-home__cards,
+  .jma-levels__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .jma-exams {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jma-exams__list {
+    max-height: 220px;
+  }
+}
+@media (max-width: 640px) {
+  .jma-top {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 14px;
+  }
+  .jma-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+  .jma-nav__item {
+    flex: none;
+    padding: 6px 12px;
+  }
+  .jma-chat__scroll,
+  .jma-home,
+  .jma-levels {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .jma-chat__foot {
+    padding: 8px 16px 14px;
+  }
+  .jma-exams {
+    padding: 14px 16px;
+  }
+  .jma-msg__body {
+    padding-left: 0;
+  }
+  .jma-home__cards,
+  .jma-levels__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jma-home h1 {
+    font-size: 30px;
+  }
+}

@@ -97,6 +97,22 @@ app:
     # default-java-version: 25
     # Versão assumida quando a pessoa pede uma "versão antiga" sem dizer qual.
     legacy-java-version: 8
+  agent:
+    # Até onde uma execução do agente vai (F15). Ao chegar em um limite ele responde com o que tem, sem dar erro.
+    # Em CPU cada passo custa minutos (um 7B gera ~2 tokens/s), então os padrões são conservadores.
+    limits:
+      # Chamadas ao modelo por pergunta. O último passo nunca usa ferramentas: é a resposta final.
+      max-steps: 6
+      # Ferramentas executadas por pergunta; as que passarem disso voltam ao modelo como erro.
+      max-tool-calls: 10
+      # Tokens gerados somando todos os passos (inclui o raciocínio).
+      max-tokens: 4096
+      # Duração total, tempo das ferramentas incluído.
+      max-duration: 15m
+      # Tempo máximo de cada ferramenta.
+      tool-timeout: 60s
+      # Tamanho máximo da saída de uma ferramenta (vai ao modelo e à tela).
+      max-tool-output-chars: 8000
 
 ---
 spring:
@@ -113,6 +129,10 @@ app:
   models:
     debug:
       # POST /internal/models/stream: stream de qualquer modelo local, para testar e medir velocidade (F05).
+      endpoint-enabled: true
+  agent:
+    debug:
+      # POST /internal/agent/run: pergunta ao agente, com ferramentas de demonstração, para testá-lo sem o chat (F15).
       endpoint-enabled: true
 
 ---

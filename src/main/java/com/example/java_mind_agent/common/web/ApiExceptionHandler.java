@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import com.example.java_mind_agent.common.ApiException;
-import com.example.java_mind_agent.common.ErrorCode;
+import com.example.java_mind_agent.common.error.ApiException;
+import com.example.java_mind_agent.common.error.ErrorCode;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -40,6 +40,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 	ResponseEntity<ProblemDetail> handleApi(ApiException e, HttpServletRequest request) {
 		ProblemDetail problem = problem(e.getCode(), e.getMessage(), request.getRequestURI());
 		problem.setProperty("retryable", e.isRetryable());
+		e.getDetails().forEach(problem::setProperty);
 		if (e.getCode() == ErrorCode.INTERNAL_ERROR) {
 			log.error("Erro interno em {}", request.getRequestURI(), e);
 		}

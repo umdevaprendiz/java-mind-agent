@@ -1,0 +1,5 @@
+dist
+coverage
+public/mockServiceWorker.js
+src/api/schema.d.ts
+package-lock.json
